@@ -58,7 +58,7 @@
 // =============================================================================
 
 // 库版本号
-#define SEEED_HA_DISCOVERY_VERSION "1.0.0"
+#define SEEED_HA_DISCOVERY_VERSION "1.1.0"
 
 // 默认端口
 #define SEEED_HA_HTTP_PORT 80   // HTTP 服务器端口（用于设备信息接口）

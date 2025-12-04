@@ -1,8 +1,12 @@
 # Seeed HA Discovery
 
 <p align="center">
+  <img src="custom_components/seeed_ha_discovery/icon.png" width="128" alt="Seeed HA Discovery">
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/ESP32-C3%20%7C%20C6%20%7C%20S3-blue" alt="ESP32 Support">
-  <img src="https://img.shields.io/badge/Home%20Assistant-2025.11+-green" alt="Home Assistant">
+  <img src="https://img.shields.io/badge/Home%20Assistant-2025.12+-green" alt="Home Assistant">
   <img src="https://img.shields.io/badge/Arduino-IDE%20%7C%20PlatformIO-orange" alt="Arduino">
   <img src="https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-yellow" alt="License">
   <img src="https://img.shields.io/badge/HACS-Custom-41BDF5" alt="HACS Custom">
@@ -56,7 +60,7 @@ ESPHome 是一个优秀的项目，但它并不适合所有人。如果你有以
 | ESPHome | Seeed HA Discovery |
 |---------|-------------------|
 | 使用 YAML 配置文件 | 使用标准 **C/C++ 代码** |
-| 基于 ESP-IDF 框架 | 基于 **Arduino 框架** |
+| 默认基于 ESP-IDF 框架（可选 Arduino） | 基于 **Arduino 框架** |
 | 需要学习新语法 | 沿用你已有的 Arduino 技能 |
 
 ```cpp
