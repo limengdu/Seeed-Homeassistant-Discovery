@@ -1,0 +1,42 @@
+{
+  "name": "Seeed Home Assistant Discovery",
+  "version": "1.0.0",
+  "description": "Connect ESP32 devices to Home Assistant via WiFi. A lightweight library for ESP32-C3/C6/S3 with mDNS auto-discovery, WebSocket real-time communication, and sensor data reporting.",
+  "keywords": [
+    "homeassistant",
+    "esp32",
+    "wifi",
+    "arduino",
+    "iot",
+    "smart-home",
+    "websocket",
+    "mdns",
+    "sensor",
+    "seeed"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/limengdu/Seeed-Homeassistant-Discovery.git"
+  },
+  "authors": [
+    {
+      "name": "limengdu",
+      "email": "limengdu@seeed.cc",
+      "maintainer": true
+    }
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/limengdu/Seeed-Homeassistant-Discovery",
+  "frameworks": ["arduino"],
+  "platforms": ["espressif32"],
+  "dependencies": [
+    {
+      "name": "ArduinoJson",
+      "version": "^7.0.0"
+    },
+    {
+      "name": "WebSockets",
+      "version": "^2.4.0"
+    }
+  ]
+}

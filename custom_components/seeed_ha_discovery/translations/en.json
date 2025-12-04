@@ -1,0 +1,26 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Seeed HA Device",
+        "description": "Add a Seeed HA device. Enter the IP address of your ESP32 device.",
+        "data": {
+          "host": "IP Address",
+          "port": "WebSocket Port"
+        }
+      },
+      "zeroconf_confirm": {
+        "title": "Device Discovered",
+        "description": "A Seeed HA device was discovered:\n\n**Device Name:** {name}\n**Model:** {model}\n**Address:** {host}\n\nDo you want to add this device?"
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to device. Please check IP address and network connection.",
+      "timeout": "Connection timeout. Please check if device is online.",
+      "unknown": "Unknown error occurred."
+    },
+    "abort": {
+      "already_configured": "This device is already configured."
+    }
+  }
+}

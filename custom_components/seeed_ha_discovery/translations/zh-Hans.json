@@ -1,0 +1,26 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Seeed HA 设备",
+        "description": "添加一个 Seeed HA 设备。请输入 ESP32 设备的 IP 地址。",
+        "data": {
+          "host": "IP 地址",
+          "port": "WebSocket 端口"
+        }
+      },
+      "zeroconf_confirm": {
+        "title": "发现设备",
+        "description": "发现了一个 Seeed HA 设备:\n\n**设备名称:** {name}\n**型号:** {model}\n**地址:** {host}\n\n是否添加此设备？"
+      }
+    },
+    "error": {
+      "cannot_connect": "无法连接到设备，请检查 IP 地址和网络连接",
+      "timeout": "连接超时，请检查设备是否在线",
+      "unknown": "发生未知错误"
+    },
+    "abort": {
+      "already_configured": "该设备已经配置过了"
+    }
+  }
+}

@@ -1,0 +1,271 @@
+"""
+Seeed HA Discovery - 配置流程
+Config flow for Seeed HA Discovery integration.
+
+这个文件处理设备的添加流程，支持两种方式：
+1. 手动添加 - 用户输入设备 IP 地址
+2. 自动发现 - 通过 mDNS/Zeroconf 自动发现局域网内的设备
+
+自动发现工作原理：
+- ESP32 设备会广播 mDNS 服务 (_seeed_ha._tcp)
+- Home Assistant 监听这个服务类型
+- 当发现新设备时，会弹出通知让用户确认添加
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+from typing import Any
+
+import aiohttp
+import voluptuous as vol
+
+from homeassistant import config_entries
+from homeassistant.components import zeroconf
+from homeassistant.const import CONF_HOST, CONF_NAME
+from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+from .const import (
+    DOMAIN,
+    CONF_DEVICE_ID,
+    CONF_PORT,
+    CONF_MODEL,
+    DEFAULT_HTTP_PORT,
+    DEFAULT_WS_PORT,
+)
+
+# 创建日志记录器
+_LOGGER = logging.getLogger(__name__)
+
+
+class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """
+    Seeed HA Discovery 配置流程处理器
+    Handle a config flow for Seeed HA Discovery.
+
+    这个类处理两种配置流程：
+    1. user - 用户手动输入设备地址
+    2. zeroconf - 自动发现设备后用户确认
+    """
+
+    # 配置流程版本，用于迁移旧配置
+    VERSION = 1
+
+    def __init__(self) -> None:
+        """
+        初始化配置流程
+        Initialize the config flow.
+
+        保存自动发现时获取的设备信息。
+        """
+        # 设备地址
+        self._host: str | None = None
+        # WebSocket 端口
+        self._port: int = DEFAULT_WS_PORT
+        # 设备唯一 ID
+        self._device_id: str | None = None
+        # 设备名称
+        self._device_name: str | None = None
+        # 设备型号
+        self._model: str | None = None
+
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """
+        处理用户手动添加设备
+        Handle the initial step - manual device addition.
+
+        显示一个表单让用户输入设备 IP 地址。
+        Shows a form for user to enter device IP address.
+
+        参数 | Args:
+            user_input: 用户输入的数据，首次调用时为 None
+
+        返回 | Returns:
+            FlowResult: 下一步的操作（显示表单或创建入口）
+        """
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            # 用户已提交表单
+            host = user_input[CONF_HOST]
+            port = user_input.get(CONF_PORT, DEFAULT_WS_PORT)
+
+            _LOGGER.info("尝试连接到设备: %s:%s", host, port)
+
+            # 尝试连接并获取设备信息
+            try:
+                device_info = await self._async_get_device_info(host)
+
+                if device_info:
+                    # 成功获取设备信息
+                    device_id = device_info.get("device_id", host.replace(".", "_"))
+
+                    # 检查设备是否已存在
+                    await self.async_set_unique_id(device_id)
+                    self._abort_if_unique_id_configured()
+
+                    _LOGGER.info("设备信息获取成功: %s", device_info)
+
+                    # 创建配置入口
+                    return self.async_create_entry(
+                        title=device_info.get("name", f"Seeed HA ({host})"),
+                        data={
+                            CONF_HOST: host,
+                            CONF_PORT: port,
+                            CONF_DEVICE_ID: device_id,
+                            CONF_MODEL: device_info.get("model", "ESP32"),
+                        },
+                    )
+                else:
+                    # 无法获取设备信息
+                    _LOGGER.warning("无法获取设备信息: %s", host)
+                    errors["base"] = "cannot_connect"
+
+            except asyncio.TimeoutError:
+                _LOGGER.warning("连接超时: %s", host)
+                errors["base"] = "timeout"
+            except Exception as err:
+                _LOGGER.exception("连接时发生未知错误: %s", err)
+                errors["base"] = "unknown"
+
+        # 显示输入表单
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema(
+                {
+                    # 设备地址 - 必填
+                    vol.Required(CONF_HOST): str,
+                    # WebSocket 端口 - 可选，默认 81
+                    vol.Optional(CONF_PORT, default=DEFAULT_WS_PORT): int,
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_zeroconf(
+        self, discovery_info: zeroconf.ZeroconfServiceInfo
+    ) -> FlowResult:
+        """
+        处理 mDNS 自动发现
+        Handle zeroconf discovery.
+
+        当 HA 发现一个新的 Seeed HA 设备时，这个函数会被调用。
+        设备通过广播 _seeed_ha._tcp 服务被发现。
+
+        参数 | Args:
+            discovery_info: mDNS 发现的设备信息
+
+        返回 | Returns:
+            FlowResult: 跳转到确认步骤
+        """
+        _LOGGER.info("发现 Seeed HA 设备: %s", discovery_info)
+        _LOGGER.info("Discovered Seeed HA device: %s", discovery_info)
+
+        # 从发现信息中提取设备数据
+        host = discovery_info.host
+        port = discovery_info.port or DEFAULT_WS_PORT
+        properties = discovery_info.properties
+
+        # 从 mDNS TXT 记录中获取设备信息
+        # Get device info from mDNS TXT records
+        device_id = properties.get("id", host.replace(".", "_"))
+        device_name = properties.get("name", f"Seeed HA ({host})")
+        model = properties.get("model", "ESP32")
+
+        _LOGGER.info("设备ID: %s, 名称: %s, 型号: %s", device_id, device_name, model)
+
+        # 设置唯一 ID，如果设备已配置则更新其地址
+        await self.async_set_unique_id(device_id)
+        self._abort_if_unique_id_configured(updates={CONF_HOST: host})
+
+        # 保存发现的设备信息
+        self._host = host
+        self._port = port
+        self._device_id = device_id
+        self._device_name = device_name
+        self._model = model
+
+        # 设置通知中显示的设备名称
+        self.context["title_placeholders"] = {"name": device_name}
+
+        # 跳转到确认步骤
+        return await self.async_step_zeroconf_confirm()
+
+    async def async_step_zeroconf_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """
+        用户确认添加自动发现的设备
+        Handle user confirmation of discovered device.
+
+        显示设备信息，让用户确认是否添加。
+        Shows device info and asks user to confirm addition.
+
+        参数 | Args:
+            user_input: 用户确认后为空字典，取消为 None
+
+        返回 | Returns:
+            FlowResult: 创建配置入口或显示确认表单
+        """
+        if user_input is not None:
+            # 用户点击了确认，创建配置入口
+            _LOGGER.info("用户确认添加设备: %s", self._device_name)
+
+            return self.async_create_entry(
+                title=self._device_name or f"Seeed HA ({self._host})",
+                data={
+                    CONF_HOST: self._host,
+                    CONF_PORT: self._port,
+                    CONF_DEVICE_ID: self._device_id,
+                    CONF_MODEL: self._model,
+                },
+            )
+
+        # 显示确认表单
+        return self.async_show_form(
+            step_id="zeroconf_confirm",
+            description_placeholders={
+                "name": self._device_name,
+                "host": self._host,
+                "model": self._model,
+            },
+        )
+
+    async def _async_get_device_info(self, host: str) -> dict[str, Any] | None:
+        """
+        通过 HTTP 获取设备信息
+        Get device info via HTTP.
+
+        ESP32 设备在 /info 端点提供 JSON 格式的设备信息。
+        ESP32 device provides JSON device info at /info endpoint.
+
+        参数 | Args:
+            host: 设备 IP 地址
+
+        返回 | Returns:
+            dict: 设备信息字典，失败时返回 None
+        """
+        session = async_get_clientsession(self.hass)
+        url = f"http://{host}:{DEFAULT_HTTP_PORT}/info"
+
+        _LOGGER.debug("请求设备信息: %s", url)
+
+        try:
+            async with asyncio.timeout(10):
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        _LOGGER.debug("设备信息: %s", data)
+                        return data
+                    else:
+                        _LOGGER.warning("设备返回错误状态码: %s", response.status)
+                        return None
+        except aiohttp.ClientError as err:
+            _LOGGER.warning("HTTP 请求失败: %s", err)
+            return None
+        except asyncio.TimeoutError:
+            _LOGGER.warning("HTTP 请求超时")
+            raise

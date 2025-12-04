@@ -1,0 +1,13 @@
+{
+  "domain": "seeed_ha_discovery",
+  "name": "Seeed HA Discovery",
+  "codeowners": ["@limengdu"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/limengdu/Seeed-Homeassistant-Discovery",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/limengdu/Seeed-Homeassistant-Discovery/issues",
+  "requirements": ["zeroconf>=0.47.0"],
+  "version": "1.0.0",
+  "zeroconf": ["_seeed_ha._tcp.local."]
+}
