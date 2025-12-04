@@ -99,6 +99,89 @@ void SeeedHASensor::_notifyChange() {
 }
 
 // =============================================================================
+// SeeedHASwitch 实现 | SeeedHASwitch Implementation
+// =============================================================================
+
+SeeedHASwitch::SeeedHASwitch(
+    const String& id,
+    const String& name,
+    const String& icon
+) :
+    _id(id),
+    _name(name),
+    _icon(icon),
+    _state(false),
+    _callback(nullptr),
+    _ha(nullptr)
+{
+    // 构造函数初始化完成
+}
+
+void SeeedHASwitch::setState(bool state) {
+    // 如果状态没有变化，不做任何事
+    if (_state == state) {
+        return;
+    }
+
+    // 更新状态
+    _state = state;
+
+    // 通知主类，状态已更新（会发送到 HA）
+    _notifyChange();
+}
+
+void SeeedHASwitch::toggle() {
+    // 切换状态
+    setState(!_state);
+}
+
+void SeeedHASwitch::onStateChange(SwitchCallback callback) {
+    // 注册回调函数
+    _callback = callback;
+}
+
+void SeeedHASwitch::setIcon(const String& icon) {
+    _icon = icon;
+}
+
+void SeeedHASwitch::toJson(JsonObject& obj) const {
+    // 将开关信息转换为 JSON 格式
+    // 这个 JSON 会发送给 Home Assistant
+
+    obj["id"] = _id;           // 开关 ID
+    obj["name"] = _name;       // 显示名称
+    obj["type"] = "switch";    // 实体类型（固定为 switch）
+    obj["state"] = _state;     // 当前状态
+
+    // 图标
+    if (_icon.length() > 0) {
+        obj["icon"] = _icon;
+    }
+}
+
+void SeeedHASwitch::_handleCommand(bool state) {
+    // 处理来自 HA 的命令
+
+    // 先更新状态（但不通知，避免循环）
+    _state = state;
+
+    // 如果有回调，调用回调让用户处理硬件操作
+    if (_callback != nullptr) {
+        _callback(state);
+    }
+
+    // 通知主类发送状态确认给 HA
+    _notifyChange();
+}
+
+void SeeedHASwitch::_notifyChange() {
+    // 通知主类，开关状态已更新
+    if (_ha != nullptr) {
+        _ha->_notifySwitchChange(_id);
+    }
+}
+
+// =============================================================================
 // SeeedHADiscovery 实现 | SeeedHADiscovery Implementation
 // =============================================================================
 
@@ -134,6 +217,12 @@ SeeedHADiscovery::~SeeedHADiscovery() {
         delete sensor;
     }
     _sensors.clear();
+
+    // 清理开关
+    for (auto sw : _switches) {
+        delete sw;
+    }
+    _switches.clear();
 }
 
 void SeeedHADiscovery::setDeviceInfo(const String& name, const String& model, const String& version) {
@@ -330,9 +419,13 @@ void SeeedHADiscovery::_handleHTTPRoot() {
             border-radius: 20px;
             font-size: 0.9em;
         }
-        .status.online {
+        .status.online, .status.on {
             background: rgba(0,255,136,0.2);
             color: #00ff88;
+        }
+        .status.off {
+            background: rgba(255,100,100,0.2);
+            color: #ff6464;
         }
         .footer {
             text-align: center;
@@ -395,6 +488,30 @@ void SeeedHADiscovery::_handleHTTPRoot() {
                 <div class="sensor-value">
                     )" + String(sensor->getValue(), sensor->getPrecision()) + R"(
                     <span class="sensor-unit">)" + sensor->getUnit() + R"(</span>
+                </div>
+            </div>)";
+        }
+    }
+
+    html += R"(
+        </div>
+
+        <div class="card">
+            <h2>开关</h2>)";
+
+    // 添加开关列表
+    if (_switches.empty()) {
+        html += R"(
+            <p style="color: #888;">暂无开关</p>)";
+    } else {
+        for (auto sw : _switches) {
+            String stateClass = sw->getState() ? "on" : "off";
+            String stateText = sw->getState() ? "开启" : "关闭";
+            html += R"(
+            <div class="sensor">
+                <div class="sensor-name">)" + sw->getName() + R"(</div>
+                <div class="sensor-value">
+                    <span class="status )" + stateClass + R"(">)" + stateText + R"(</span>
                 </div>
             </div>)";
         }
@@ -480,8 +597,14 @@ void SeeedHADiscovery::_handleWSEvent(uint8_t num, WStype_t type, uint8_t* paylo
                 _wsServer->sendTXT(num, responseStr);
             }
             else if (msgType == "discovery") {
-                // 发现请求，发送传感器列表
+                // 发现请求，发送实体列表
                 _sendDiscovery(num);
+            }
+            else if (msgType == "command") {
+                // 来自 HA 的控制命令
+                // 格式: {type: "command", entity_id: "led", command: "turn_on"} 或
+                //       {type: "command", entity_id: "led", state: true}
+                _handleCommand(doc);
             }
             break;
         }
@@ -504,6 +627,12 @@ void SeeedHADiscovery::_sendDiscovery(uint8_t clientNum) {
         sensor->toJson(obj);
     }
 
+    // 添加所有开关
+    for (auto sw : _switches) {
+        JsonObject obj = entities.add<JsonObject>();
+        sw->toJson(obj);
+    }
+
     // 序列化并发送
     String message;
     serializeJson(doc, message);
@@ -516,7 +645,8 @@ void SeeedHADiscovery::_sendDiscovery(uint8_t clientNum) {
         _wsServer->sendTXT(clientNum, message);
     }
 
-    _log("已发送发现信息: " + String(_sensors.size()) + " 个传感器");
+    _log("已发送发现信息: " + String(_sensors.size()) + " 个传感器, " +
+         String(_switches.size()) + " 个开关");
 }
 
 void SeeedHADiscovery::_sendSensorState(const String& sensorId, uint8_t clientNum) {
@@ -581,11 +711,122 @@ SeeedHASensor* SeeedHADiscovery::addSensor(
     return sensor;
 }
 
+SeeedHASwitch* SeeedHADiscovery::addSwitch(
+    const String& id,
+    const String& name,
+    const String& icon
+) {
+    // 创建新开关
+    SeeedHASwitch* sw = new SeeedHASwitch(id, name, icon);
+    sw->_ha = this;
+
+    // 添加到列表
+    _switches.push_back(sw);
+
+    _log("添加开关: " + name + " (ID: " + id + ")");
+
+    return sw;
+}
+
 void SeeedHADiscovery::_notifySensorChange(const String& sensorId) {
     // 当传感器值变化时，发送状态更新
     if (_wsClientConnected) {
         _sendSensorState(sensorId);
     }
+}
+
+void SeeedHADiscovery::_notifySwitchChange(const String& switchId) {
+    // 当开关状态变化时，发送状态更新
+    if (_wsClientConnected) {
+        _sendSwitchState(switchId);
+    }
+}
+
+void SeeedHADiscovery::_sendSwitchState(const String& switchId, uint8_t clientNum) {
+    // 查找开关
+    SeeedHASwitch* sw = nullptr;
+    for (auto s : _switches) {
+        if (s->getId() == switchId) {
+            sw = s;
+            break;
+        }
+    }
+
+    if (sw == nullptr) {
+        return;
+    }
+
+    // 构建状态更新消息
+    JsonDocument doc;
+    doc["type"] = "state";
+    doc["entity_id"] = switchId;
+    doc["state"] = sw->getState();
+
+    // 序列化并发送
+    String message;
+    serializeJson(doc, message);
+
+    if (clientNum == 255) {
+        _broadcastMessage(message);
+    } else {
+        _wsServer->sendTXT(clientNum, message);
+    }
+
+    _log("发送开关状态: " + switchId + " = " + String(sw->getState() ? "ON" : "OFF"));
+}
+
+void SeeedHADiscovery::_handleCommand(JsonDocument& doc) {
+    // 处理来自 Home Assistant 的控制命令
+    // 格式 1: {type: "command", entity_id: "led", command: "turn_on"}
+    // 格式 2: {type: "command", entity_id: "led", state: true}
+
+    String entityId = doc["entity_id"].as<String>();
+
+    if (entityId.length() == 0) {
+        _log("命令错误: 缺少 entity_id");
+        return;
+    }
+
+    // 确定目标状态
+    bool targetState = false;
+
+    if (doc["command"].is<String>()) {
+        // 格式 1: 使用命令字符串
+        String command = doc["command"].as<String>();
+        if (command == "turn_on") {
+            targetState = true;
+        } else if (command == "turn_off") {
+            targetState = false;
+        } else if (command == "toggle") {
+            // 需要先找到开关获取当前状态
+            for (auto sw : _switches) {
+                if (sw->getId() == entityId) {
+                    targetState = !sw->getState();
+                    break;
+                }
+            }
+        } else {
+            _log("未知命令: " + command);
+            return;
+        }
+    } else if (doc["state"].is<bool>()) {
+        // 格式 2: 直接使用状态值
+        targetState = doc["state"].as<bool>();
+    } else {
+        _log("命令错误: 缺少 command 或 state");
+        return;
+    }
+
+    // 查找并执行命令
+    for (auto sw : _switches) {
+        if (sw->getId() == entityId) {
+            _log("执行命令: " + entityId + " -> " + String(targetState ? "ON" : "OFF"));
+            sw->_handleCommand(targetState);
+            return;
+        }
+    }
+
+    _log("未找到开关: " + entityId);
 }
 
 void SeeedHADiscovery::handle() {

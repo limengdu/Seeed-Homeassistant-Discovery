@@ -70,6 +70,19 @@
 
 class SeeedHADiscovery;
 class SeeedHASensor;
+class SeeedHASwitch;
+
+// =============================================================================
+// 回调函数类型定义 | Callback Type Definitions
+// =============================================================================
+
+/**
+ * 开关状态变化回调函数类型
+ * Callback type for switch state change
+ *
+ * @param state 新的开关状态（true = 开, false = 关）
+ */
+typedef void (*SwitchCallback)(bool state);
 
 // =============================================================================
 // SeeedHASensor - 传感器类
@@ -191,6 +204,145 @@ private:
 };
 
 // =============================================================================
+// SeeedHASwitch - 开关类
+// =============================================================================
+
+/**
+ * 开关类 - 代表一个可控制的开关设备
+ * Switch class - represents a controllable switch device
+ *
+ * 用于接收来自 Home Assistant 的控制命令，如控制 LED、继电器等。
+ * Used to receive control commands from Home Assistant.
+ *
+ * 工作流程：
+ * 1. 创建开关并注册回调函数
+ * 2. Home Assistant 发送开关命令
+ * 3. 回调函数被调用，执行实际的硬件操作
+ * 4. 状态自动同步回 Home Assistant
+ *
+ * 示例：
+ * ```cpp
+ * SeeedHASwitch* ledSwitch = ha.addSwitch("led", "LED灯");
+ * ledSwitch->onStateChange([](bool state) {
+ *     digitalWrite(LED_BUILTIN, state ? HIGH : LOW);
+ * });
+ * ```
+ */
+class SeeedHASwitch {
+public:
+    /**
+     * 构造函数
+     * Constructor
+     *
+     * @param id 开关 ID（唯一标识符，如 "led"）
+     * @param name 显示名称（如 "LED灯"）
+     * @param icon 图标（如 "mdi:lightbulb"）
+     */
+    SeeedHASwitch(
+        const String& id,
+        const String& name,
+        const String& icon = ""
+    );
+
+    // =========================================================================
+    // 状态控制 | State Control
+    // =========================================================================
+
+    /**
+     * 设置开关状态
+     * Set switch state
+     *
+     * 调用此方法会更新状态并同步到 Home Assistant。
+     * 通常在回调函数中执行硬件操作后调用。
+     *
+     * @param state 开关状态（true = 开, false = 关）
+     */
+    void setState(bool state);
+
+    /**
+     * 切换开关状态
+     * Toggle switch state
+     *
+     * 如果当前是开，则关；如果当前是关，则开。
+     */
+    void toggle();
+
+    // =========================================================================
+    // 回调注册 | Callback Registration
+    // =========================================================================
+
+    /**
+     * 注册状态变化回调函数
+     * Register state change callback
+     *
+     * 当 Home Assistant 发送开关命令时，此回调会被调用。
+     * 你应该在回调中执行实际的硬件操作（如 digitalWrite）。
+     *
+     * @param callback 回调函数，接收新状态作为参数
+     *
+     * 示例：
+     * ```cpp
+     * ledSwitch->onStateChange([](bool state) {
+     *     digitalWrite(LED_BUILTIN, state ? HIGH : LOW);
+     *     Serial.printf("LED: %s\n", state ? "ON" : "OFF");
+     * });
+     * ```
+     */
+    void onStateChange(SwitchCallback callback);
+
+    // =========================================================================
+    // 获取方法 | Getters
+    // =========================================================================
+
+    const String& getId() const { return _id; }
+    const String& getName() const { return _name; }
+    bool getState() const { return _state; }
+    const String& getIcon() const { return _icon; }
+
+    // =========================================================================
+    // 配置方法 | Configuration
+    // =========================================================================
+
+    /**
+     * 设置图标
+     * Set icon
+     *
+     * @param icon 图标名称（mdi 格式，如 "mdi:lightbulb"）
+     */
+    void setIcon(const String& icon);
+
+    // =========================================================================
+    // 内部方法 | Internal Methods
+    // =========================================================================
+
+    /**
+     * 转换为 JSON 格式（用于发送到 HA）
+     * Convert to JSON format (for sending to HA)
+     */
+    void toJson(JsonObject& obj) const;
+
+    /**
+     * 处理来自 HA 的命令（内部使用）
+     * Handle command from HA (internal use)
+     */
+    void _handleCommand(bool state);
+
+private:
+    String _id;              // 开关 ID
+    String _name;            // 显示名称
+    String _icon;            // 图标
+    bool _state;             // 当前状态
+    SwitchCallback _callback; // 状态变化回调
+
+    // 关联的主类实例
+    SeeedHADiscovery* _ha;
+    friend class SeeedHADiscovery;
+
+    // 通知状态变化
+    void _notifyChange();
+};
+
+// =============================================================================
 // SeeedHADiscovery - 主类
 // =============================================================================
 
@@ -300,6 +452,35 @@ public:
     );
 
     // =========================================================================
+    // 开关管理 | Switch Management
+    // =========================================================================
+
+    /**
+     * 添加一个开关
+     * Add a switch
+     *
+     * 创建一个新的开关实体，用于接收 Home Assistant 的控制命令。
+     *
+     * @param id 开关 ID（唯一标识符，如 "led"）
+     * @param name 显示名称（如 "LED灯"）
+     * @param icon 图标（如 "mdi:lightbulb"）
+     * @return 开关对象指针
+     *
+     * 示例：
+     * ```cpp
+     * SeeedHASwitch* led = ha.addSwitch("led", "LED灯", "mdi:led-on");
+     * led->onStateChange([](bool state) {
+     *     digitalWrite(LED_BUILTIN, state ? HIGH : LOW);
+     * });
+     * ```
+     */
+    SeeedHASwitch* addSwitch(
+        const String& id,
+        const String& name,
+        const String& icon = ""
+    );
+
+    // =========================================================================
     // 运行时方法 | Runtime Methods
     // =========================================================================
 
@@ -346,10 +527,11 @@ public:
     const String& getDeviceId() const { return _deviceId; }
 
     // =========================================================================
-    // 内部方法（传感器类使用）| Internal Methods (used by sensor class)
+    // 内部方法（实体类使用）| Internal Methods (used by entity classes)
     // =========================================================================
 
     void _notifySensorChange(const String& sensorId);
+    void _notifySwitchChange(const String& switchId);
 
 private:
     // -------------------------------------------------------------------------
@@ -371,6 +553,11 @@ private:
     // 传感器列表 | Sensor List
     // -------------------------------------------------------------------------
     std::vector<SeeedHASensor*> _sensors;
+
+    // -------------------------------------------------------------------------
+    // 开关列表 | Switch List
+    // -------------------------------------------------------------------------
+    std::vector<SeeedHASwitch*> _switches;
 
     // -------------------------------------------------------------------------
     // 状态变量 | State Variables
@@ -406,6 +593,12 @@ private:
 
     // 发送传感器状态更新
     void _sendSensorState(const String& sensorId, uint8_t clientNum = 255);
+
+    // 发送开关状态更新
+    void _sendSwitchState(const String& switchId, uint8_t clientNum = 255);
+
+    // 处理来自 HA 的命令消息
+    void _handleCommand(JsonDocument& doc);
 
     // 广播消息到所有 WebSocket 客户端
     void _broadcastMessage(const String& message);

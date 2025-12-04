@@ -32,6 +32,7 @@ from .const import (
     MSG_TYPE_PONG,
     MSG_TYPE_STATE,
     MSG_TYPE_DISCOVERY,
+    MSG_TYPE_COMMAND,
     HEARTBEAT_INTERVAL,
     RECONNECT_INTERVAL,
     DEFAULT_HTTP_PORT,
@@ -443,3 +444,45 @@ class SeeedHADevice:
             "type": MSG_TYPE_DISCOVERY,
             "action": "request",
         })
+
+    async def async_send_command(
+        self,
+        entity_id: str,
+        command: str | None = None,
+        state: bool | None = None,
+    ) -> bool:
+        """
+        发送控制命令到设备
+        Send control command to device.
+
+        用于控制开关等可执行器。
+        Used to control switches and other actuators.
+
+        参数 | Args:
+            entity_id: 目标实体 ID
+            command: 命令字符串 ("turn_on", "turn_off", "toggle")
+            state: 直接指定状态 (True/False)
+
+        返回 | Returns:
+            bool: 命令是否发送成功
+
+        示例 | Examples:
+            await device.async_send_command("led", command="turn_on")
+            await device.async_send_command("led", state=True)
+        """
+        data: dict[str, Any] = {
+            "type": MSG_TYPE_COMMAND,
+            "entity_id": entity_id,
+        }
+
+        if command is not None:
+            data["command"] = command
+            _LOGGER.info("发送命令: %s -> %s", entity_id, command)
+        elif state is not None:
+            data["state"] = state
+            _LOGGER.info("发送状态: %s -> %s", entity_id, state)
+        else:
+            _LOGGER.error("发送命令失败: 必须提供 command 或 state")
+            return False
+
+        return await self._async_send(data)

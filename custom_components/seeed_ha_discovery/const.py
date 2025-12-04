@@ -92,12 +92,17 @@ MSG_TYPE_STATE: Final = "state"
 # Device discovery - device reports its entities
 MSG_TYPE_DISCOVERY: Final = "discovery"
 
+# 控制命令 - HA 发送到设备
+# Control command - sent from HA to device
+MSG_TYPE_COMMAND: Final = "command"
+
 # =============================================================================
 # 支持的平台 | Supported Platforms
 # =============================================================================
 
-# 当前只支持传感器平台
-# Currently only sensor platform is supported
+# 支持传感器和开关平台
+# Supports sensor and switch platforms
 PLATFORMS: Final = [
     "sensor",
+    "switch",
 ]
