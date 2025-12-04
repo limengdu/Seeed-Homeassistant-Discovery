@@ -11,7 +11,12 @@
  *
  * 硬件要求：
  * - XIAO ESP32-C3/C6/S3 或 XIAO nRF52840
- * - 按钮接在指定引脚
+ * - 按钮接在指定引脚（默认 D1）
+ *
+ * 软件依赖：
+ * - ESP32: NimBLE-Arduino (通过库管理器安装)
+ * - nRF52840 mbed: ArduinoBLE (已内置)
+ * - nRF52840 Adafruit: Bluefruit (已内置)
  *
  * @author limengdu
  * @version 1.0.0
@@ -41,7 +46,6 @@ const char* DEVICE_NAME = "XIAO 按钮";
 
 SeeedHADiscoveryBLE ble;
 SeeedBLESensor* button;
-SeeedBLESensor* batterySensor;
 
 // 按钮状态
 bool lastButtonState = HIGH;
@@ -119,36 +123,45 @@ void setup() {
 
     // 初始化按钮引脚
     pinMode(BUTTON_PIN, INPUT_PULLUP);
-    Serial.printf("按钮引脚: GPIO%d\n", BUTTON_PIN);
+    Serial.print("按钮引脚: D1 (GPIO");
+    Serial.print(BUTTON_PIN);
+    Serial.println(")");
 
     // 启用调试
     ble.enableDebug(true);
 
     // 初始化 BLE
     if (!ble.begin(DEVICE_NAME)) {
-        Serial.println("❌ BLE 初始化失败！");
+        Serial.println("BLE 初始化失败！");
         while (1) delay(1000);
     }
 
-    Serial.println("✅ BLE 初始化成功！");
+    Serial.println("BLE 初始化成功！");
 
-    // 添加按钮和电池传感器
+    // 添加按钮
     button = ble.addButton();
-    batterySensor = ble.addBattery();
-    batterySensor->setValue(100);  // 初始电量
 
-    Serial.println("✅ 传感器已添加");
+    Serial.println("按钮已添加");
 
     Serial.println();
     Serial.println("========================================");
-    Serial.println("  等待按钮事件...");
+    Serial.println("  初始化完成！");
     Serial.println("========================================");
     Serial.println();
-    Serial.println("支持的事件:");
+    Serial.print("设备名称: ");
+    Serial.println(DEVICE_NAME);
+    Serial.print("MAC 地址: ");
+    Serial.println(ble.getAddress());
+    Serial.println();
+    Serial.println("提示: 在 HA 中可通过 MAC 地址识别此设备");
+    Serial.println();
+    Serial.println("支持的按钮事件:");
     Serial.println("  - 单击");
     Serial.println("  - 双击");
     Serial.println("  - 三击");
     Serial.println("  - 长按 (>1秒)");
+    Serial.println();
+    Serial.println("等待按钮事件...");
     Serial.println();
 }
 
@@ -179,9 +192,9 @@ void loop() {
                 eventName = "未知";
         }
 
-        Serial.printf("📡 按钮事件: %s\n", eventName);
+        Serial.print("按钮事件: ");
+        Serial.println(eventName);
     }
 
     delay(10);  // 按钮去抖
 }
-

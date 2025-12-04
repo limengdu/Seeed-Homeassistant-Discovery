@@ -2,18 +2,22 @@
 Seeed HA Discovery - 传感器平台
 Sensor platform for Seeed HA Discovery.
 
-这个模块实现传感器实体，用于：
-1. 显示温度数据
-2. 显示湿度数据
-3. 显示其他数值型传感器
+这个模块实现传感器实体，支持：
+1. WiFi 设备：通过 WebSocket 接收数据
+2. BLE 设备：通过蓝牙被动监听广播数据
 
-工作流程：
+WiFi 传感器工作流程：
 1. 设备通过 WebSocket 发送 discovery 消息，报告其传感器列表
 2. 本模块根据 discovery 创建对应的传感器实体
 3. 设备持续发送 state 消息更新传感器值
 4. 实体自动刷新 UI 显示
 
-传感器数据格式示例：
+BLE 传感器工作流程：
+1. 设备广播 BTHome 格式数据
+2. HA 蓝牙适配器接收广播
+3. 解析数据并更新传感器状态
+
+传感器数据格式示例（WiFi）：
 {
     "id": "temperature",
     "name": "温度",
@@ -41,8 +45,16 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, MANUFACTURER, CONF_DEVICE_ID, CONF_MODEL
-from .coordinator import SeeedHACoordinator
+from .const import (
+    DOMAIN,
+    MANUFACTURER,
+    CONF_DEVICE_ID,
+    CONF_MODEL,
+    CONF_CONNECTION_TYPE,
+    CONF_BLE_ADDRESS,
+    CONNECTION_TYPE_BLE,
+    CONNECTION_TYPE_WIFI,
+)
 
 # 创建日志记录器
 _LOGGER = logging.getLogger(__name__)
@@ -57,21 +69,54 @@ async def async_setup_entry(
     设置传感器平台
     Set up Seeed HA sensors.
 
-    这个函数在集成加载时被调用，负责：
-    1. 获取设备已发现的传感器
-    2. 创建对应的 HA 传感器实体
-    3. 注册监听，动态添加新发现的传感器
+    这个函数在集成加载时被调用，根据连接类型选择不同的设置方式。
 
     参数 | Args:
         hass: Home Assistant 实例
         entry: 配置入口
         async_add_entities: 添加实体的回调函数
     """
+    # 获取连接类型
+    connection_type = entry.data.get(CONF_CONNECTION_TYPE, CONNECTION_TYPE_WIFI)
+
+    if connection_type == CONNECTION_TYPE_BLE:
+        # BLE 设备传感器设置
+        await _async_setup_ble_sensors(hass, entry, async_add_entities)
+    else:
+        # WiFi 设备传感器设置
+        await _async_setup_wifi_sensors(hass, entry, async_add_entities)
+
+
+async def _async_setup_ble_sensors(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """
+    设置 BLE 设备传感器
+    Set up BLE device sensors.
+    """
+    from .ble_sensor import async_setup_ble_sensors
+
+    await async_setup_ble_sensors(hass, entry, async_add_entities)
+
+
+async def _async_setup_wifi_sensors(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """
+    设置 WiFi 设备传感器
+    Set up WiFi device sensors.
+    """
+    from .coordinator import SeeedHACoordinator
+
     # 获取设备数据
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator: SeeedHACoordinator = data["coordinator"]
 
-    _LOGGER.info("设置传感器平台，设备: %s", entry.data.get(CONF_DEVICE_ID))
+    _LOGGER.info("设置 WiFi 传感器平台，设备: %s", entry.data.get(CONF_DEVICE_ID))
 
     # 创建已发现的传感器实体
     entities = []
@@ -114,12 +159,12 @@ async def async_setup_entry(
     coordinator.device.add_discovery_callback(handle_discovery)
 
 
-class SeeedHASensor(CoordinatorEntity[SeeedHACoordinator], SensorEntity):
+class SeeedHASensor(CoordinatorEntity, SensorEntity):
     """
-    Seeed HA 传感器实体
-    Representation of a Seeed HA sensor.
+    Seeed HA WiFi 传感器实体
+    Representation of a Seeed HA WiFi sensor.
 
-    这个类代表一个传感器实体（如温度、湿度）。
+    这个类代表一个 WiFi 设备的传感器实体（如温度、湿度）。
     继承自：
     - CoordinatorEntity: 自动监听协调器的数据更新
     - SensorEntity: HA 传感器实体基类
@@ -135,7 +180,7 @@ class SeeedHASensor(CoordinatorEntity[SeeedHACoordinator], SensorEntity):
 
     def __init__(
         self,
-        coordinator: SeeedHACoordinator,
+        coordinator,
         entity_config: dict[str, Any],
         entry: ConfigEntry,
     ) -> None:

@@ -2,13 +2,19 @@
 Seeed HA Discovery - 配置流程
 Config flow for Seeed HA Discovery integration.
 
-这个文件处理设备的添加流程，支持两种方式：
-1. 手动添加 - 用户输入设备 IP 地址
-2. 自动发现 - 通过 mDNS/Zeroconf 自动发现局域网内的设备
+这个文件处理设备的添加流程，支持三种方式：
+1. 手动添加 - 用户输入设备 IP 地址 (WiFi 设备)
+2. 自动发现 (mDNS) - 通过 Zeroconf 自动发现局域网内的 WiFi 设备
+3. 自动发现 (BLE) - 通过蓝牙发现 BTHome 格式的 BLE 设备
 
-自动发现工作原理：
+WiFi 自动发现工作原理：
 - ESP32 设备会广播 mDNS 服务 (_seeed_ha._tcp)
 - Home Assistant 监听这个服务类型
+- 当发现新设备时，会弹出通知让用户确认添加
+
+BLE 自动发现工作原理：
+- XIAO nRF52840/ESP32 设备广播 BTHome 格式的数据
+- Home Assistant 通过蓝牙适配器扫描并识别
 - 当发现新设备时，会弹出通知让用户确认添加
 """
 from __future__ import annotations
@@ -22,6 +28,7 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.components import zeroconf
+from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
 from homeassistant.const import CONF_HOST, CONF_NAME
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -31,9 +38,14 @@ from .const import (
     CONF_DEVICE_ID,
     CONF_PORT,
     CONF_MODEL,
+    CONF_CONNECTION_TYPE,
+    CONF_BLE_ADDRESS,
+    CONNECTION_TYPE_WIFI,
+    CONNECTION_TYPE_BLE,
     DEFAULT_HTTP_PORT,
     DEFAULT_WS_PORT,
 )
+from .bluetooth import parse_ble_advertisement, is_seeed_ble_device
 
 # 创建日志记录器
 _LOGGER = logging.getLogger(__name__)
@@ -44,9 +56,10 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     Seeed HA Discovery 配置流程处理器
     Handle a config flow for Seeed HA Discovery.
 
-    这个类处理两种配置流程：
+    这个类处理三种配置流程：
     1. user - 用户手动输入设备地址
-    2. zeroconf - 自动发现设备后用户确认
+    2. zeroconf - WiFi 设备自动发现后用户确认
+    3. bluetooth - BLE 设备自动发现后用户确认
     """
 
     # 配置流程版本，用于迁移旧配置
@@ -59,9 +72,9 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         保存自动发现时获取的设备信息。
         """
-        # 设备地址
+        # 设备地址 (WiFi: IP 地址, BLE: MAC 地址)
         self._host: str | None = None
-        # WebSocket 端口
+        # WebSocket 端口 (仅 WiFi)
         self._port: int = DEFAULT_WS_PORT
         # 设备唯一 ID
         self._device_id: str | None = None
@@ -69,6 +82,12 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._device_name: str | None = None
         # 设备型号
         self._model: str | None = None
+        # 连接类型 (wifi / ble)
+        self._connection_type: str = CONNECTION_TYPE_WIFI
+        # BLE 设备地址
+        self._ble_address: str | None = None
+        # BLE 设备的传感器信息 (用于显示)
+        self._ble_sensors: list[str] = []
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -117,6 +136,7 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             CONF_PORT: port,
                             CONF_DEVICE_ID: device_id,
                             CONF_MODEL: device_info.get("model", "ESP32"),
+                            CONF_CONNECTION_TYPE: CONNECTION_TYPE_WIFI,
                         },
                     )
                 else:
@@ -149,10 +169,10 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, discovery_info: zeroconf.ZeroconfServiceInfo
     ) -> FlowResult:
         """
-        处理 mDNS 自动发现
+        处理 mDNS 自动发现 (WiFi 设备)
         Handle zeroconf discovery.
 
-        当 HA 发现一个新的 Seeed HA 设备时，这个函数会被调用。
+        当 HA 发现一个新的 Seeed HA WiFi 设备时，这个函数会被调用。
         设备通过广播 _seeed_ha._tcp 服务被发现。
 
         参数 | Args:
@@ -161,8 +181,8 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         返回 | Returns:
             FlowResult: 跳转到确认步骤
         """
-        _LOGGER.info("发现 Seeed HA 设备: %s", discovery_info)
-        _LOGGER.info("Discovered Seeed HA device: %s", discovery_info)
+        _LOGGER.info("发现 Seeed HA WiFi 设备: %s", discovery_info)
+        _LOGGER.info("Discovered Seeed HA WiFi device: %s", discovery_info)
 
         # 从发现信息中提取设备数据
         host = discovery_info.host
@@ -187,6 +207,7 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._device_id = device_id
         self._device_name = device_name
         self._model = model
+        self._connection_type = CONNECTION_TYPE_WIFI
 
         # 设置通知中显示的设备名称
         self.context["title_placeholders"] = {"name": device_name}
@@ -198,8 +219,8 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """
-        用户确认添加自动发现的设备
-        Handle user confirmation of discovered device.
+        用户确认添加自动发现的 WiFi 设备
+        Handle user confirmation of discovered WiFi device.
 
         显示设备信息，让用户确认是否添加。
         Shows device info and asks user to confirm addition.
@@ -212,7 +233,7 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """
         if user_input is not None:
             # 用户点击了确认，创建配置入口
-            _LOGGER.info("用户确认添加设备: %s", self._device_name)
+            _LOGGER.info("用户确认添加 WiFi 设备: %s", self._device_name)
 
             return self.async_create_entry(
                 title=self._device_name or f"Seeed HA ({self._host})",
@@ -221,6 +242,7 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_PORT: self._port,
                     CONF_DEVICE_ID: self._device_id,
                     CONF_MODEL: self._model,
+                    CONF_CONNECTION_TYPE: CONNECTION_TYPE_WIFI,
                 },
             )
 
@@ -234,10 +256,118 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             },
         )
 
+    # =========================================================================
+    # BLE 设备发现流程
+    # =========================================================================
+
+    async def async_step_bluetooth(
+        self, discovery_info: BluetoothServiceInfoBleak
+    ) -> FlowResult:
+        """
+        处理蓝牙自动发现 (BLE 设备)
+        Handle Bluetooth discovery.
+
+        当 HA 发现一个新的 Seeed HA BLE 设备时，这个函数会被调用。
+        设备通过广播 BTHome 格式的数据被发现。
+
+        参数 | Args:
+            discovery_info: 蓝牙发现的设备信息
+
+        返回 | Returns:
+            FlowResult: 跳转到确认步骤
+        """
+        _LOGGER.info("发现 Seeed HA BLE 设备: %s (%s)", 
+                     discovery_info.name, discovery_info.address)
+
+        # 检查是否是有效的 Seeed/BTHome 设备
+        if not is_seeed_ble_device(discovery_info):
+            _LOGGER.debug("不是有效的 Seeed BLE 设备")
+            return self.async_abort(reason="not_supported")
+
+        # 解析 BLE 广播数据
+        device = parse_ble_advertisement(discovery_info)
+        if device is None:
+            _LOGGER.debug("无法解析 BLE 广播数据")
+            return self.async_abort(reason="not_supported")
+
+        # 使用 BLE 地址作为唯一 ID
+        device_id = f"ble_{discovery_info.address.replace(':', '_').lower()}"
+
+        # 设置唯一 ID
+        await self.async_set_unique_id(device_id)
+        self._abort_if_unique_id_configured()
+
+        # 保存发现的设备信息
+        self._ble_address = discovery_info.address
+        self._device_id = device_id
+        self._device_name = device.name
+        self._model = "XIAO BLE"  # 默认型号
+        self._connection_type = CONNECTION_TYPE_BLE
+
+        # 保存传感器信息用于显示
+        self._ble_sensors = [
+            f"{s.name}: {s.value} {s.unit or ''}" for s in device.sensors
+        ]
+
+        # 设置通知中显示的设备名称
+        self.context["title_placeholders"] = {"name": device.name}
+
+        # 跳转到确认步骤
+        return await self.async_step_bluetooth_confirm()
+
+    async def async_step_bluetooth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """
+        用户确认添加自动发现的 BLE 设备
+        Handle user confirmation of discovered BLE device.
+
+        显示设备信息和当前传感器数据，让用户确认是否添加。
+        Shows device info and current sensor data, asks user to confirm addition.
+
+        参数 | Args:
+            user_input: 用户确认后为空字典，取消为 None
+
+        返回 | Returns:
+            FlowResult: 创建配置入口或显示确认表单
+        """
+        if user_input is not None:
+            # 用户点击了确认，创建配置入口
+            _LOGGER.info("用户确认添加 BLE 设备: %s (%s)", 
+                         self._device_name, self._ble_address)
+
+            return self.async_create_entry(
+                title=self._device_name or f"Seeed BLE ({self._ble_address})",
+                data={
+                    CONF_DEVICE_ID: self._device_id,
+                    CONF_BLE_ADDRESS: self._ble_address,
+                    CONF_MODEL: self._model,
+                    CONF_CONNECTION_TYPE: CONNECTION_TYPE_BLE,
+                },
+            )
+
+        # 格式化传感器信息用于显示
+        sensors_str = ", ".join(self._ble_sensors) if self._ble_sensors else "无"
+
+        # 显示确认表单
+        return self.async_show_form(
+            step_id="bluetooth_confirm",
+            description_placeholders={
+                "name": self._device_name,
+                "address": self._ble_address,
+                "model": self._model,
+                "sensors": sensors_str,
+            },
+        )
+
+    # =========================================================================
+    # 辅助方法
+    # =========================================================================
+
     async def _async_get_device_info(self, host: str) -> dict[str, Any] | None:
         """
-        通过 HTTP 获取设备信息
-        Get device info via HTTP.
+        通过 HTTP 获取 WiFi 设备信息
+        Get WiFi device info via HTTP.
 
         ESP32 设备在 /info 端点提供 JSON 格式的设备信息。
         ESP32 device provides JSON device info at /info endpoint.

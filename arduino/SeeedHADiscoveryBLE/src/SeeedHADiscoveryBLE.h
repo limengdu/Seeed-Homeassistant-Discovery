@@ -7,34 +7,17 @@
  * 这个库让 ESP32 和 nRF52840 设备能够通过蓝牙连接到 Home Assistant：
  * - 支持 XIAO nRF52840、XIAO ESP32-C3/C6/S3
  * - 基于 BTHome v2 协议，HA 原生支持
- * - 被动广播模式，超低功耗
- * - 简单易用的 API
+ * - 支持传感器数据上报（被动广播）
+ * - 支持开关控制（GATT 双向通信）
  *
  * 使用方法：
  * 1. 创建 SeeedHADiscoveryBLE 实例
  * 2. 调用 begin() 初始化 BLE
- * 3. 使用 addSensor() 添加传感器
- * 4. 定期调用 advertise() 发送广播
- *
- * 示例：
- * ```cpp
- * SeeedHADiscoveryBLE ble;
- * SeeedBLESensor* temp;
- *
- * void setup() {
- *     ble.begin("温度传感器");
- *     temp = ble.addSensor(BTHOME_TEMPERATURE);
- * }
- *
- * void loop() {
- *     temp->setValue(25.5);
- *     ble.advertise();
- *     delay(5000);
- * }
- * ```
+ * 3. 使用 addSensor() 添加传感器 / addSwitch() 添加开关
+ * 4. 定期调用 loop() 处理事件
  *
  * @author limengdu
- * @version 1.0.0
+ * @version 1.1.0
  * @license MIT
  */
 
@@ -42,18 +25,30 @@
 #define SEEED_HA_DISCOVERY_BLE_H
 
 #include <Arduino.h>
+#include <functional>
 
-// 根据平台选择 BLE 库
-#if defined(ARDUINO_ARCH_NRF52)
-    // nRF52840 使用 Bluefruit 库
-    #include <bluefruit.h>
-    #define SEEED_BLE_NRF52
-#elif defined(ESP32)
-    // ESP32 使用 NimBLE 库（更轻量）
+// =============================================================================
+// 平台检测
+// Platform Detection
+// =============================================================================
+
+#if defined(ESP32)
     #include <NimBLEDevice.h>
     #define SEEED_BLE_ESP32
+    #define SEEED_BLE_PLATFORM "ESP32 (NimBLE)"
+
+#elif defined(ARDUINO_ARCH_MBED) && defined(ARDUINO_ARCH_NRF52840)
+    #include <ArduinoBLE.h>
+    #define SEEED_BLE_MBED_NRF52840
+    #define SEEED_BLE_PLATFORM "nRF52840 (ArduinoBLE)"
+
+#elif defined(ARDUINO_NRF52_ADAFRUIT) || defined(ARDUINO_ARCH_NRF52)
+    #include <bluefruit.h>
+    #define SEEED_BLE_NRF52_BLUEFRUIT
+    #define SEEED_BLE_PLATFORM "nRF52 (Bluefruit)"
+
 #else
-    #error "Unsupported platform. Use XIAO nRF52840 or XIAO ESP32 series."
+    #error "Unsupported platform. Supported: XIAO ESP32 series, XIAO nRF52840 (mbed or Adafruit BSP)"
 #endif
 
 #include <vector>
@@ -62,80 +57,78 @@
 // 版本和常量
 // =============================================================================
 
-#define SEEED_BLE_VERSION "1.0.0"
+#define SEEED_BLE_VERSION "1.1.0"
 
 // Seeed Manufacturer ID (0x5EED = "SEED")
 #define SEEED_MANUFACTURER_ID 0x5EED
 
 // BTHome Service UUID
 #define BTHOME_SERVICE_UUID 0xFCD2
+#define BTHOME_SERVICE_UUID_STR "0000fcd2-0000-1000-8000-00805f9b34fb"
+
+// Seeed HA Control Service UUID (自定义)
+// 用于双向通信控制
+#define SEEED_CONTROL_SERVICE_UUID        "5eed0001-b5a3-f393-e0a9-e50e24dcca9e"
+#define SEEED_CONTROL_COMMAND_CHAR_UUID   "5eed0002-b5a3-f393-e0a9-e50e24dcca9e"
+#define SEEED_CONTROL_STATE_CHAR_UUID     "5eed0003-b5a3-f393-e0a9-e50e24dcca9e"
 
 // BTHome 设备信息标志
-#define BTHOME_DEVICE_INFO_ENCRYPT  0x01  // 加密
-#define BTHOME_DEVICE_INFO_TRIGGER  0x04  // 触发器设备
-#define BTHOME_DEVICE_INFO_VERSION  0x40  // BTHome v2
+#define BTHOME_DEVICE_INFO_ENCRYPT  0x01
+#define BTHOME_DEVICE_INFO_TRIGGER  0x04
+#define BTHOME_DEVICE_INFO_VERSION  0x40
 
 // =============================================================================
-// BTHome 传感器类型定义
+// BTHome 传感器类型定义 (BTHome v2 规范)
 // =============================================================================
 
 enum BTHomeObjectId : uint8_t {
-    // 杂项
-    BTHOME_PACKET_ID        = 0x00,  // uint8
-    
-    // 传感器 - 1 字节
-    BTHOME_BATTERY          = 0x01,  // uint8, %
-    BTHOME_CO2              = 0x12,  // uint16, ppm
-    BTHOME_COUNT_UINT8      = 0x09,  // uint8
-    BTHOME_HUMIDITY_UINT8   = 0x2E,  // uint8, %
-    BTHOME_MOISTURE_UINT8   = 0x2F,  // uint8, %
-    BTHOME_UV_INDEX         = 0x46,  // uint8, UV index
-    
-    // 传感器 - 2 字节
-    BTHOME_TEMPERATURE      = 0x02,  // int16, 0.01°C
-    BTHOME_HUMIDITY         = 0x03,  // uint16, 0.01%
-    BTHOME_PRESSURE         = 0x04,  // uint24, 0.01 hPa
-    BTHOME_ILLUMINANCE      = 0x05,  // uint24, 0.01 lux
-    BTHOME_MASS_KG          = 0x06,  // uint16, 0.01 kg
-    BTHOME_MASS_LB          = 0x07,  // uint16, 0.01 lb
-    BTHOME_DEWPOINT         = 0x08,  // int16, 0.01°C
-    BTHOME_COUNT_UINT16     = 0x0A,  // uint16
-    BTHOME_COUNT_UINT32     = 0x0B,  // uint32
-    BTHOME_ENERGY           = 0x0C,  // uint24, 0.001 kWh
-    BTHOME_POWER            = 0x0D,  // uint24, 0.01 W
-    BTHOME_VOLTAGE          = 0x0E,  // uint16, 0.001 V
-    BTHOME_PM25             = 0x0F,  // uint16, μg/m³
-    BTHOME_PM10             = 0x10,  // uint16, μg/m³
-    BTHOME_TVOC             = 0x13,  // uint16, μg/m³
-    BTHOME_MOISTURE         = 0x14,  // uint16, 0.01%
-    BTHOME_DISTANCE_MM      = 0x40,  // uint16, mm
-    BTHOME_DISTANCE_M       = 0x41,  // uint16, 0.1m
-    BTHOME_DURATION         = 0x42,  // uint24, 0.001s
-    BTHOME_CURRENT          = 0x43,  // uint16, 0.001A
-    BTHOME_SPEED            = 0x44,  // uint16, 0.01 m/s
-    BTHOME_TEMPERATURE_TENTH = 0x45, // int16, 0.1°C
-    BTHOME_VOLUME_LITERS    = 0x47,  // uint16, 0.1L
-    BTHOME_VOLUME_ML        = 0x48,  // uint16, mL
-    BTHOME_VOLUME_FLOW      = 0x49,  // uint16, 0.001 m³/h
-    BTHOME_VOLTAGE_TENTH    = 0x4A,  // uint16, 0.1V
-    BTHOME_GAS              = 0x4B,  // uint24, 0.001 m³
-    BTHOME_GAS_UINT32       = 0x4C,  // uint32, 0.001 m³
-    BTHOME_ENERGY_UINT32    = 0x4D,  // uint32, 0.001 kWh
-    BTHOME_VOLUME_UINT32    = 0x4E,  // uint32, 0.001 L
-    BTHOME_WATER            = 0x4F,  // uint32, 0.001 L
-    BTHOME_ROTATION         = 0x3F,  // int16, 0.1°
-    
-    // 二进制传感器
-    BTHOME_BINARY_GENERIC   = 0x0F,  // uint8, 0/1
-    BTHOME_BINARY_POWER     = 0x10,  // uint8, 0/1
-    BTHOME_BINARY_OPENING   = 0x11,  // uint8, 0/1
-    BTHOME_BINARY_BATTERY_LOW = 0x15, // uint8, 0/1
-    BTHOME_BINARY_BATTERY_CHARGING = 0x16, // uint8, 0/1
-    BTHOME_BINARY_MOTION    = 0x21,  // uint8, 0/1
-    BTHOME_BINARY_OCCUPANCY = 0x20,  // uint8, 0/1
-    
-    // 按钮事件
-    BTHOME_BUTTON           = 0x3A,  // uint8, event
+    BTHOME_PACKET_ID        = 0x00,
+    BTHOME_BATTERY          = 0x01,
+    BTHOME_TEMPERATURE      = 0x02,
+    BTHOME_HUMIDITY         = 0x03,
+    BTHOME_PRESSURE         = 0x04,
+    BTHOME_ILLUMINANCE      = 0x05,
+    BTHOME_MASS_KG          = 0x06,
+    BTHOME_MASS_LB          = 0x07,
+    BTHOME_DEWPOINT         = 0x08,
+    BTHOME_COUNT_UINT8      = 0x09,
+    BTHOME_ENERGY           = 0x0A,
+    BTHOME_POWER            = 0x0B,
+    BTHOME_VOLTAGE          = 0x0C,
+    BTHOME_PM25             = 0x0D,
+    BTHOME_PM10             = 0x0E,
+    BTHOME_BINARY_GENERIC   = 0x0F,
+    BTHOME_BINARY_POWER     = 0x10,
+    BTHOME_BINARY_OPENING   = 0x11,
+    BTHOME_CO2              = 0x12,
+    BTHOME_TVOC             = 0x13,
+    BTHOME_MOISTURE         = 0x14,
+    BTHOME_BINARY_BATTERY_LOW = 0x15,
+    BTHOME_BINARY_BATTERY_CHARGING = 0x16,
+    BTHOME_COUNT_UINT16     = 0x3D,
+    BTHOME_COUNT_UINT32     = 0x3E,
+    BTHOME_ROTATION         = 0x3F,
+    BTHOME_DISTANCE_MM      = 0x40,
+    BTHOME_DISTANCE_M       = 0x41,
+    BTHOME_DURATION         = 0x42,
+    BTHOME_CURRENT          = 0x43,
+    BTHOME_SPEED            = 0x44,
+    BTHOME_TEMPERATURE_TENTH = 0x45,
+    BTHOME_UV_INDEX         = 0x46,
+    BTHOME_VOLUME_LITERS    = 0x47,
+    BTHOME_VOLUME_ML        = 0x48,
+    BTHOME_VOLUME_FLOW      = 0x49,
+    BTHOME_VOLTAGE_TENTH    = 0x4A,
+    BTHOME_GAS              = 0x4B,
+    BTHOME_GAS_UINT32       = 0x4C,
+    BTHOME_ENERGY_UINT32    = 0x4D,
+    BTHOME_VOLUME_UINT32    = 0x4E,
+    BTHOME_WATER            = 0x4F,
+    BTHOME_HUMIDITY_UINT8   = 0x2E,
+    BTHOME_MOISTURE_UINT8   = 0x2F,
+    BTHOME_BINARY_OCCUPANCY = 0x20,
+    BTHOME_BINARY_MOTION    = 0x21,
+    BTHOME_BUTTON           = 0x3A,
 };
 
 // 按钮事件类型
@@ -155,116 +148,122 @@ enum BTHomeButtonEvent : uint8_t {
 
 class SeeedHADiscoveryBLE;
 class SeeedBLESensor;
+class SeeedBLESwitch;
+
+// =============================================================================
+// 回调函数类型
+// =============================================================================
+
+// 开关状态变化回调
+typedef std::function<void(bool state)> BLESwitchCallback;
 
 // =============================================================================
 // SeeedBLESensor - BLE 传感器类
 // =============================================================================
 
-/**
- * BLE 传感器类 - 代表一个通过 BLE 广播的传感器
- */
 class SeeedBLESensor {
 public:
-    /**
-     * 构造函数
-     * @param objectId BTHome 对象 ID
-     */
     SeeedBLESensor(BTHomeObjectId objectId);
 
-    /**
-     * 设置传感器值（整数）
-     * @param value 传感器值
-     */
     void setValue(int32_t value);
-
-    /**
-     * 设置传感器值（浮点数，会自动转换）
-     * @param value 传感器值
-     */
     void setValue(float value);
-
-    /**
-     * 设置二进制状态
-     * @param state 状态
-     */
     void setState(bool state);
-
-    /**
-     * 触发按钮事件
-     * @param event 事件类型
-     */
     void triggerButton(BTHomeButtonEvent event);
 
-    // 获取器
     BTHomeObjectId getObjectId() const { return _objectId; }
     int32_t getRawValue() const { return _rawValue; }
     bool hasValue() const { return _hasValue; }
 
-    // 获取数据大小
     uint8_t getDataSize() const;
-
-    // 写入数据到缓冲区
     void writeToBuffer(uint8_t* buffer, uint8_t& offset) const;
 
 private:
     BTHomeObjectId _objectId;
     int32_t _rawValue;
     bool _hasValue;
-
-    // 根据类型获取乘数
     float _getMultiplier() const;
+};
+
+// =============================================================================
+// SeeedBLESwitch - BLE 开关类
+// =============================================================================
+
+/**
+ * BLE 开关类 - 支持从 Home Assistant 接收控制命令
+ * 
+ * 使用 GATT 特征值实现双向通信：
+ * - HA 写入命令特征值来控制开关
+ * - 设备通过状态特征值通知 HA 当前状态
+ */
+class SeeedBLESwitch {
+public:
+    /**
+     * 构造函数
+     * @param id 开关 ID（用于识别）
+     * @param name 开关名称（显示用）
+     */
+    SeeedBLESwitch(const char* id, const char* name);
+
+    /**
+     * 设置开关状态
+     * @param state true = 开, false = 关
+     */
+    void setState(bool state);
+
+    /**
+     * 切换开关状态
+     */
+    void toggle();
+
+    /**
+     * 获取当前状态
+     */
+    bool getState() const { return _state; }
+
+    /**
+     * 获取开关 ID
+     */
+    const char* getId() const { return _id; }
+
+    /**
+     * 获取开关名称
+     */
+    const char* getName() const { return _name; }
+
+    /**
+     * 注册状态变化回调
+     * 当 HA 发送控制命令时调用
+     */
+    void onStateChange(BLESwitchCallback callback) { _callback = callback; }
+
+    // 内部使用
+    void _handleCommand(bool state);
+    void _setParent(SeeedHADiscoveryBLE* parent) { _parent = parent; }
+
+private:
+    char _id[32];
+    char _name[32];
+    bool _state;
+    BLESwitchCallback _callback;
+    SeeedHADiscoveryBLE* _parent;
 };
 
 // =============================================================================
 // SeeedHADiscoveryBLE - 主类
 // =============================================================================
 
-/**
- * Seeed Home Assistant Discovery BLE 主类
- * 
- * 负责：
- * - BLE 初始化
- * - 传感器管理
- * - BTHome 格式广播
- */
 class SeeedHADiscoveryBLE {
 public:
-    /**
-     * 构造函数
-     */
     SeeedHADiscoveryBLE();
-
-    /**
-     * 析构函数
-     */
     ~SeeedHADiscoveryBLE();
 
     // =========================================================================
     // 配置方法
     // =========================================================================
 
-    /**
-     * 设置设备名称
-     * @param name 设备名称（最多 20 字符）
-     */
     void setDeviceName(const char* name);
-
-    /**
-     * 启用调试输出
-     * @param enable 是否启用
-     */
     void enableDebug(bool enable = true);
-
-    /**
-     * 设置广播间隔
-     * @param intervalMs 间隔（毫秒），默认 5000
-     */
     void setAdvertiseInterval(uint32_t intervalMs);
-
-    /**
-     * 设置发射功率
-     * @param power 功率级别（平台相关）
-     */
     void setTxPower(int8_t power);
 
     // =========================================================================
@@ -272,88 +271,89 @@ public:
     // =========================================================================
 
     /**
-     * 初始化 BLE
-     * @param deviceName 设备名称
-     * @return 是否成功
+     * 初始化 BLE（仅传感器模式，被动广播）
      */
     bool begin(const char* deviceName = "Seeed Sensor");
+
+    /**
+     * 初始化 BLE（双向通信模式，支持控制）
+     * @param deviceName 设备名称
+     * @param enableControl 是否启用控制功能（GATT 服务）
+     */
+    bool begin(const char* deviceName, bool enableControl);
 
     /**
      * 停止 BLE
      */
     void stop();
 
+    /**
+     * 处理 BLE 事件（必须在 loop 中调用）
+     * 用于处理 GATT 连接和命令
+     */
+    void loop();
+
     // =========================================================================
     // 传感器管理
     // =========================================================================
 
-    /**
-     * 添加传感器
-     * @param objectId BTHome 对象 ID
-     * @return 传感器对象指针
-     */
     SeeedBLESensor* addSensor(BTHomeObjectId objectId);
-
-    /**
-     * 添加温度传感器（便捷方法）
-     */
     SeeedBLESensor* addTemperature() { return addSensor(BTHOME_TEMPERATURE); }
-
-    /**
-     * 添加湿度传感器（便捷方法）
-     */
     SeeedBLESensor* addHumidity() { return addSensor(BTHOME_HUMIDITY); }
-
-    /**
-     * 添加电池传感器（便捷方法）
-     */
     SeeedBLESensor* addBattery() { return addSensor(BTHOME_BATTERY); }
+    SeeedBLESensor* addButton() { return addSensor(BTHOME_BUTTON); }
+
+    // =========================================================================
+    // 开关管理
+    // =========================================================================
 
     /**
-     * 添加按钮（便捷方法）
+     * 添加开关
+     * @param id 开关 ID
+     * @param name 开关名称
+     * @return 开关对象指针
      */
-    SeeedBLESensor* addButton() { return addSensor(BTHOME_BUTTON); }
+    SeeedBLESwitch* addSwitch(const char* id, const char* name);
 
     // =========================================================================
     // 广播
     // =========================================================================
 
-    /**
-     * 发送 BLE 广播
-     * 会自动构建 BTHome 格式的广播数据
-     */
     void advertise();
-
-    /**
-     * 手动更新广播数据（不发送）
-     */
     void updateAdvertiseData();
 
     // =========================================================================
     // 状态查询
     // =========================================================================
 
-    /**
-     * 检查 BLE 是否已初始化
-     */
     bool isRunning() const { return _running; }
-
-    /**
-     * 获取设备名称
-     */
+    bool isConnected() const { return _connected; }
     const char* getDeviceName() const { return _deviceName; }
+    String getAddress();
+
+    // =========================================================================
+    // 内部方法（供回调使用）
+    // =========================================================================
+
+    void _handleCommand(const uint8_t* data, size_t length);
+    void _notifyStateChange();
+    void _onConnect();
+    void _onDisconnect();
 
 private:
     // 设备配置
     char _deviceName[21];
     bool _debug;
     bool _running;
+    bool _connected;
+    bool _controlEnabled;
     uint32_t _advertiseInterval;
     int8_t _txPower;
     uint8_t _packetId;
 
-    // 传感器列表
+    // 传感器和开关列表
     std::vector<SeeedBLESensor*> _sensors;
+    std::vector<SeeedBLESwitch*> _switches;
 
     // 广播数据缓冲区
     uint8_t _advData[31];
@@ -361,14 +361,23 @@ private:
 
     // 平台特定的 BLE 对象
 #ifdef SEEED_BLE_ESP32
+    NimBLEServer* _pServer;
+    NimBLEService* _pControlService;
+    NimBLECharacteristic* _pCommandChar;
+    NimBLECharacteristic* _pStateChar;
     NimBLEAdvertising* _pAdvertising;
+#elif defined(SEEED_BLE_MBED_NRF52840)
+    BLEService* _pControlService;
+    BLECharacteristic* _pCommandChar;
+    BLECharacteristic* _pStateChar;
 #endif
 
     // 内部方法
     void _buildAdvData();
+    void _setupGATTServer();
+    void _buildStateData(uint8_t* buffer, size_t* length);
     void _log(const char* message);
     void _logf(const char* format, ...);
 };
 
 #endif // SEEED_HA_DISCOVERY_BLE_H
-

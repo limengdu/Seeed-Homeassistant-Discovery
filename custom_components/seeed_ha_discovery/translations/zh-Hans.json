@@ -3,15 +3,19 @@
     "step": {
       "user": {
         "title": "Seeed HA 设备",
-        "description": "添加一个 Seeed HA 设备。请输入 ESP32 设备的 IP 地址。",
+        "description": "添加一个 Seeed HA WiFi 设备。请输入 ESP32 设备的 IP 地址。",
         "data": {
           "host": "IP 地址",
           "port": "WebSocket 端口"
         }
       },
       "zeroconf_confirm": {
-        "title": "发现设备",
-        "description": "发现了一个 Seeed HA 设备:\n\n**设备名称:** {name}\n**型号:** {model}\n**地址:** {host}\n\n是否添加此设备？"
+        "title": "发现 WiFi 设备",
+        "description": "发现了一个 Seeed HA WiFi 设备:\n\n**设备名称:** {name}\n**型号:** {model}\n**地址:** {host}\n\n是否添加此设备？"
+      },
+      "bluetooth_confirm": {
+        "title": "发现蓝牙设备",
+        "description": "发现了一个 Seeed HA 蓝牙设备:\n\n**设备名称:** {name}\n**型号:** {model}\n**蓝牙地址:** {address}\n**当前传感器:** {sensors}\n\n是否添加此设备？"
       }
     },
     "error": {
@@ -20,7 +24,8 @@
       "unknown": "发生未知错误"
     },
     "abort": {
-      "already_configured": "该设备已经配置过了"
+      "already_configured": "该设备已经配置过了",
+      "not_supported": "不支持的设备类型"
     }
   }
 }

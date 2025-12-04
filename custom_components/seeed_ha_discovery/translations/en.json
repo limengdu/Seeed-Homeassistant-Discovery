@@ -3,15 +3,19 @@
     "step": {
       "user": {
         "title": "Seeed HA Device",
-        "description": "Add a Seeed HA device. Enter the IP address of your ESP32 device.",
+        "description": "Add a Seeed HA WiFi device. Enter the IP address of your ESP32 device.",
         "data": {
           "host": "IP Address",
           "port": "WebSocket Port"
         }
       },
       "zeroconf_confirm": {
-        "title": "Device Discovered",
-        "description": "A Seeed HA device was discovered:\n\n**Device Name:** {name}\n**Model:** {model}\n**Address:** {host}\n\nDo you want to add this device?"
+        "title": "WiFi Device Discovered",
+        "description": "A Seeed HA WiFi device was discovered:\n\n**Device Name:** {name}\n**Model:** {model}\n**Address:** {host}\n\nDo you want to add this device?"
+      },
+      "bluetooth_confirm": {
+        "title": "Bluetooth Device Discovered",
+        "description": "A Seeed HA Bluetooth device was discovered:\n\n**Device Name:** {name}\n**Model:** {model}\n**Bluetooth Address:** {address}\n**Current Sensors:** {sensors}\n\nDo you want to add this device?"
       }
     },
     "error": {
@@ -20,7 +24,8 @@
       "unknown": "Unknown error occurred."
     },
     "abort": {
-      "already_configured": "This device is already configured."
+      "already_configured": "This device is already configured.",
+      "not_supported": "Device type not supported."
     }
   }
 }

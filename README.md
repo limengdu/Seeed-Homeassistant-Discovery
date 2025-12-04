@@ -198,15 +198,24 @@ lib_deps =
 **Arduino IDE:**
 1. 下载 `arduino/SeeedHADiscoveryBLE` 文件夹
 2. 复制到 `文档/Arduino/libraries/`
-3. 安装依赖库：
-   - **ESP32**: NimBLE-Arduino (通过库管理器)
-   - **nRF52840**: 已内置 Bluefruit 库
+3. 根据你的开发板安装对应的 BLE 依赖库：
+
+| 开发板 | 依赖库 | 安装方式 |
+|--------|--------|----------|
+| **ESP32 系列** (C3/C6/S3) | NimBLE-Arduino | Arduino 库管理器搜索 "NimBLE-Arduino" |
+
+> ⚠️ **ESP32 必须安装 NimBLE-Arduino 库**，否则编译会报错！
+>
+> NimBLE 比 ESP32 官方的蓝牙库更轻量、更稳定，是 ESP32 BLE 开发的首选。
 
 **PlatformIO:**
 ```ini
-; ESP32
+; ESP32 系列
 lib_deps =
     h2zero/NimBLE-Arduino@^1.4.0
+
+; nRF52840 (mbed)
+; ArduinoBLE 已内置于 Seeed mbed 核心，无需额外安装
 ```
 
 ### 3. 编写 Arduino 程序
@@ -516,6 +525,35 @@ seeed-ha-discovery/
 ### Q5: 支持哪些 device_class？
 
 参考 [Home Assistant 传感器文档](https://www.home-assistant.io/integrations/sensor/#device-class)。
+
+### Q6: 多个设备使用相同代码，HA 能区分吗？
+
+**可以！** Home Assistant 通过每个设备的**唯一标识**来区分：
+
+| 连接方式 | 唯一标识 | 示例 |
+|----------|----------|------|
+| WiFi | MAC 地址 + mDNS ID | `seeed_ha_a1b2c3` |
+| BLE | 蓝牙 MAC 地址 | `0B:76:DD:33:FA:21` |
+
+即使 10 个设备烧录完全相同的代码，HA 也会将它们识别为 10 个独立设备。
+
+⚠️ **但设备名称会相同**，可能造成混淆。建议：
+
+**方法 1: 为每个设备设置不同名称（推荐）**
+
+```cpp
+// WiFi 设备
+ha.setDeviceInfo("温湿度-客厅", "ESP32-C3", "1.0.0");  // 设备 1
+ha.setDeviceInfo("温湿度-卧室", "ESP32-C3", "1.0.0");  // 设备 2
+
+// BLE 设备
+ble.begin("传感器-客厅");  // 设备 1
+ble.begin("传感器-卧室");  // 设备 2
+```
+
+**方法 2: 添加后在 HA 中重命名**
+
+在 Home Assistant 的 **设置 → 设备与服务** 中找到设备，点击设备名称即可修改。
 
 ---
 

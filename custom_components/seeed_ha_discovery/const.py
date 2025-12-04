@@ -8,6 +8,7 @@ Constants for the Seeed HA Discovery integration.
 - 默认端口设置
 - mDNS 服务类型
 - WebSocket 消息类型
+- BLE 相关配置
 """
 from typing import Final
 
@@ -106,3 +107,72 @@ PLATFORMS: Final = [
     "sensor",
     "switch",
 ]
+
+# =============================================================================
+# BLE 配置 | BLE Configuration
+# =============================================================================
+
+# Seeed Manufacturer ID (0x5EED = 24301)
+SEEED_MANUFACTURER_ID: Final = 0x5EED
+
+# BTHome Service UUID
+BTHOME_SERVICE_UUID: Final = "0000fcd2-0000-1000-8000-00805f9b34fb"
+
+# 连接类型
+CONF_CONNECTION_TYPE: Final = "connection_type"
+CONNECTION_TYPE_WIFI: Final = "wifi"
+CONNECTION_TYPE_BLE: Final = "ble"
+
+# BLE 设备地址
+CONF_BLE_ADDRESS: Final = "ble_address"
+
+# =============================================================================
+# BTHome 传感器类型映射 | BTHome Sensor Type Mapping
+# =============================================================================
+
+# BTHome Object ID 到 Home Assistant 传感器类型的映射
+BTHOME_SENSOR_TYPES: Final = {
+    0x01: {"name": "Battery", "device_class": "battery", "unit": "%"},
+    0x02: {"name": "Temperature", "device_class": "temperature", "unit": "°C", "factor": 0.01},
+    0x03: {"name": "Humidity", "device_class": "humidity", "unit": "%", "factor": 0.01},
+    0x04: {"name": "Pressure", "device_class": "pressure", "unit": "hPa", "factor": 0.01},
+    0x05: {"name": "Illuminance", "device_class": "illuminance", "unit": "lx", "factor": 0.01},
+    0x06: {"name": "Mass", "device_class": "weight", "unit": "kg", "factor": 0.01},
+    0x08: {"name": "Dewpoint", "device_class": "temperature", "unit": "°C", "factor": 0.01},
+    0x09: {"name": "Count", "device_class": None, "unit": None},
+    0x0A: {"name": "Energy", "device_class": "energy", "unit": "kWh", "factor": 0.001},
+    0x0B: {"name": "Power", "device_class": "power", "unit": "W", "factor": 0.01},
+    0x0C: {"name": "Voltage", "device_class": "voltage", "unit": "V", "factor": 0.001},
+    0x0D: {"name": "PM2.5", "device_class": "pm25", "unit": "µg/m³"},
+    0x0E: {"name": "PM10", "device_class": "pm10", "unit": "µg/m³"},
+    0x12: {"name": "CO2", "device_class": "carbon_dioxide", "unit": "ppm"},
+    0x13: {"name": "TVOC", "device_class": "volatile_organic_compounds", "unit": "µg/m³"},
+    0x14: {"name": "Moisture", "device_class": "moisture", "unit": "%", "factor": 0.01},
+    0x2E: {"name": "Humidity", "device_class": "humidity", "unit": "%"},
+    0x45: {"name": "Temperature", "device_class": "temperature", "unit": "°C", "factor": 0.1},
+    0x46: {"name": "UV Index", "device_class": None, "unit": "UV index"},
+}
+
+# BTHome 二进制传感器类型映射
+BTHOME_BINARY_SENSOR_TYPES: Final = {
+    0x0F: {"name": "Generic", "device_class": None},
+    0x10: {"name": "Power", "device_class": "power"},
+    0x11: {"name": "Opening", "device_class": "opening"},
+    0x15: {"name": "Battery Low", "device_class": "battery"},
+    0x16: {"name": "Battery Charging", "device_class": "battery_charging"},
+    0x20: {"name": "Occupancy", "device_class": "occupancy"},
+    0x21: {"name": "Motion", "device_class": "motion"},
+}
+
+# BTHome 事件类型（如按钮）
+BTHOME_EVENT_TYPES: Final = {
+    0x3A: {"name": "Button", "events": {
+        0x00: "none",
+        0x01: "press",
+        0x02: "double_press",
+        0x03: "triple_press",
+        0x04: "long_press",
+        0x05: "long_double_press",
+        0x06: "long_triple_press",
+    }},
+}

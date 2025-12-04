@@ -4,15 +4,18 @@ The Seeed HA Discovery integration.
 
 这个文件是 Home Assistant 集成的主入口，负责：
 1. 初始化集成 - 当用户添加设备时调用
-2. 建立与 ESP32 设备的 WebSocket 连接
-3. 加载传感器平台
-4. 处理集成的卸载
+2. 区分 WiFi 和 BLE 设备，使用不同的连接方式
+3. WiFi 设备：建立与 ESP32 设备的 WebSocket 连接
+4. BLE 设备：通过蓝牙被动监听广播数据
+5. 加载传感器平台
+6. 处理集成的卸载
 
 工作流程：
-1. 用户通过配置流程添加设备（手动输入IP或自动发现）
-2. async_setup_entry() 被调用，创建设备连接
+1. 用户通过配置流程添加设备（手动输入IP/自动发现WiFi/自动发现BLE）
+2. async_setup_entry() 被调用，根据连接类型创建设备连接
 3. 加载 sensor 平台，创建传感器实体
-4. 保持 WebSocket 连接，实时接收传感器数据
+4. WiFi: 保持 WebSocket 连接，实时接收传感器数据
+5. BLE: 被动监听蓝牙广播，自动更新传感器数据
 """
 from __future__ import annotations
 
@@ -28,6 +31,10 @@ from .const import (
     PLATFORMS,
     CONF_HOST,
     CONF_PORT,
+    CONF_CONNECTION_TYPE,
+    CONF_BLE_ADDRESS,
+    CONNECTION_TYPE_WIFI,
+    CONNECTION_TYPE_BLE,
     DEFAULT_WS_PORT,
 )
 from .coordinator import SeeedHACoordinator
@@ -56,51 +63,89 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # 确保存储字典存在
     # Ensure the storage dictionary exists
     hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN][entry.entry_id] = {}
 
+    # 获取连接类型，默认为 WiFi（兼容旧配置）
+    connection_type = entry.data.get(CONF_CONNECTION_TYPE, CONNECTION_TYPE_WIFI)
+
+    if connection_type == CONNECTION_TYPE_BLE:
+        # BLE 设备设置
+        return await _async_setup_ble_entry(hass, entry)
+    else:
+        # WiFi 设备设置
+        return await _async_setup_wifi_entry(hass, entry)
+
+
+async def _async_setup_wifi_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """
+    设置 WiFi 设备
+    Set up a WiFi device.
+    """
     # 从配置中获取设备地址和端口
-    # Get device address and port from config
     host = entry.data[CONF_HOST]
     port = entry.data.get(CONF_PORT, DEFAULT_WS_PORT)
 
-    _LOGGER.info("正在设置 Seeed HA 设备: %s:%s", host, port)
-    _LOGGER.info("Setting up Seeed HA device: %s:%s", host, port)
+    _LOGGER.info("正在设置 Seeed HA WiFi 设备: %s:%s", host, port)
+    _LOGGER.info("Setting up Seeed HA WiFi device: %s:%s", host, port)
 
     # 创建设备实例 - 负责与 ESP32 通信
-    # Create device instance - handles communication with ESP32
     device = SeeedHADevice(hass, host, port, entry)
 
     # 创建协调器 - 管理数据更新和实体状态
-    # Create coordinator - manages data updates and entity states
     coordinator = SeeedHACoordinator(hass, device, entry)
 
     # 尝试连接到设备
-    # Try to connect to the device
     try:
         await coordinator.async_connect()
-        _LOGGER.info("成功连接到设备 %s", host)
-        _LOGGER.info("Successfully connected to device %s", host)
+        _LOGGER.info("成功连接到 WiFi 设备 %s", host)
+        _LOGGER.info("Successfully connected to WiFi device %s", host)
     except Exception as err:
-        _LOGGER.error("无法连接到 Seeed HA 设备 %s: %s", host, err)
-        _LOGGER.error("Failed to connect to Seeed HA device at %s: %s", host, err)
-        # 抛出异常，HA 会稍后重试
-        # Raise exception, HA will retry later
+        _LOGGER.error("无法连接到 Seeed HA WiFi 设备 %s: %s", host, err)
+        _LOGGER.error("Failed to connect to Seeed HA WiFi device at %s: %s", host, err)
         raise ConfigEntryNotReady(f"无法连接到 {host}") from err
 
-    # 保存设备和协调器引用，供其他模块使用
-    # Store device and coordinator references for other modules
+    # 保存设备和协调器引用
     hass.data[DOMAIN][entry.entry_id] = {
         "device": device,
         "coordinator": coordinator,
+        "connection_type": CONNECTION_TYPE_WIFI,
     }
 
     # 加载传感器平台
-    # Load sensor platform
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # 注册配置更新监听器
-    # Register config update listener
     entry.async_on_unload(entry.add_update_listener(async_update_options))
 
+    return True
+
+
+async def _async_setup_ble_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """
+    设置 BLE 设备
+    Set up a BLE device.
+
+    BLE 设备使用被动监听模式，不需要主动连接。
+    传感器数据通过蓝牙广播接收。
+    """
+    ble_address = entry.data[CONF_BLE_ADDRESS]
+
+    _LOGGER.info("正在设置 Seeed HA BLE 设备: %s", ble_address)
+    _LOGGER.info("Setting up Seeed HA BLE device: %s", ble_address)
+
+    # BLE 设备不需要主动连接，只需要保存配置
+    hass.data[DOMAIN][entry.entry_id] = {
+        "ble_address": ble_address,
+        "connection_type": CONNECTION_TYPE_BLE,
+    }
+
+    # 加载传感器平台（会自动处理 BLE 传感器）
+    await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
+
+    # 注册配置更新监听器
+    entry.async_on_unload(entry.add_update_listener(async_update_options))
+
+    _LOGGER.info("BLE 设备设置完成: %s", ble_address)
     return True
 
 
@@ -122,19 +167,24 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _LOGGER.info("正在卸载 Seeed HA 设备")
     _LOGGER.info("Unloading Seeed HA device")
 
+    # 获取连接类型
+    data = hass.data[DOMAIN].get(entry.entry_id, {})
+    connection_type = data.get("connection_type", CONNECTION_TYPE_WIFI)
+
+    # 确定要卸载的平台
+    platforms_to_unload = ["sensor"] if connection_type == CONNECTION_TYPE_BLE else PLATFORMS
+
     # 卸载所有平台
-    # Unload all platforms
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms_to_unload)
 
     if unload_ok:
         # 获取并清理设备数据
-        # Get and clean up device data
-        data = hass.data[DOMAIN].pop(entry.entry_id)
-        coordinator: SeeedHACoordinator = data["coordinator"]
+        data = hass.data[DOMAIN].pop(entry.entry_id, {})
 
-        # 断开 WebSocket 连接
-        # Disconnect WebSocket connection
-        await coordinator.async_disconnect()
+        # 如果是 WiFi 设备，断开 WebSocket 连接
+        if connection_type == CONNECTION_TYPE_WIFI and "coordinator" in data:
+            coordinator: SeeedHACoordinator = data["coordinator"]
+            await coordinator.async_disconnect()
 
         _LOGGER.info("设备卸载完成")
         _LOGGER.info("Device unloaded successfully")
