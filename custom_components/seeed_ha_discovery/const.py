@@ -57,6 +57,10 @@ DEFAULT_HTTP_PORT: Final = 80
 # Default WebSocket server port
 DEFAULT_WS_PORT: Final = 81
 
+# 摄像头服务器默认端口
+# Default camera server port
+DEFAULT_CAMERA_PORT: Final = 82
+
 # 重连间隔（秒）
 # Reconnect interval in seconds
 RECONNECT_INTERVAL: Final = 30
@@ -103,11 +107,12 @@ MSG_TYPE_COMMAND: Final = "command"
 # 支持的平台 | Supported Platforms
 # =============================================================================
 
-# 支持传感器和开关平台
-# Supports sensor and switch platforms
+# 支持传感器、开关和摄像头平台
+# Supports sensor, switch and camera platforms
 PLATFORMS: Final = [
     "sensor",
     "switch",
+    "camera",
 ]
 
 # =============================================================================

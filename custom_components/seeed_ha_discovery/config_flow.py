@@ -59,7 +59,7 @@ from .const import (
 )
 from .bluetooth import parse_ble_advertisement, is_seeed_ble_device
 
-# 创建日志记录器
+# 创建日志记录器 | Create logger
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -74,7 +74,7 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     3. bluetooth - BLE 设备自动发现后用户确认
     """
 
-    # 配置流程版本，用于迁移旧配置
+    # 配置流程版本，用于迁移旧配置 | Config flow version for migration
     VERSION = 1
 
     def __init__(self) -> None:
@@ -83,26 +83,27 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         Initialize the config flow.
 
         保存自动发现时获取的设备信息。
+        Saves device info obtained during auto-discovery.
         """
-        # 设备地址 (WiFi: IP 地址, BLE: MAC 地址)
+        # 设备地址 (WiFi: IP 地址, BLE: MAC 地址) | Device address (WiFi: IP, BLE: MAC)
         self._host: str | None = None
-        # WebSocket 端口 (仅 WiFi)
+        # WebSocket 端口 (仅 WiFi) | WebSocket port (WiFi only)
         self._port: int = DEFAULT_WS_PORT
-        # 设备唯一 ID
+        # 设备唯一 ID | Device unique ID
         self._device_id: str | None = None
-        # 设备名称
+        # 设备名称 | Device name
         self._device_name: str | None = None
-        # 设备型号
+        # 设备型号 | Device model
         self._model: str | None = None
-        # 连接类型 (wifi / ble)
+        # 连接类型 (wifi / ble) | Connection type (wifi / ble)
         self._connection_type: str = CONNECTION_TYPE_WIFI
-        # BLE 设备地址
+        # BLE 设备地址 | BLE device address
         self._ble_address: str | None = None
-        # BLE 设备的传感器信息 (用于显示)
+        # BLE 设备的传感器信息 (用于显示) | BLE sensor info (for display)
         self._ble_sensors: list[str] = []
-        # BLE 设备是否支持控制
+        # BLE 设备是否支持控制 | Whether BLE device supports control
         self._ble_control: bool = False
-        # BLE 设备的开关配置
+        # BLE 设备的开关配置 | BLE switch configs
         self._switch_configs: list[dict[str, Any]] = []
 
     async def async_step_user(
@@ -116,37 +117,37 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         Shows a form for user to enter device IP address.
 
         参数 | Args:
-            user_input: 用户输入的数据，首次调用时为 None
+            user_input: 用户输入的数据，首次调用时为 None | User input data, None on first call
 
         返回 | Returns:
-            FlowResult: 下一步的操作（显示表单或创建入口）
+            FlowResult: 下一步的操作（显示表单或创建入口）| Next action (show form or create entry)
         """
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # 用户已提交表单
+            # 用户已提交表单 | User submitted form
             host = user_input[CONF_HOST]
             port = user_input.get(CONF_PORT, DEFAULT_WS_PORT)
 
             # 尝试连接到设备 | Trying to connect to device
             _LOGGER.info("Trying to connect to device: %s:%s", host, port)
 
-            # 尝试连接并获取设备信息
+            # 尝试连接并获取设备信息 | Try to connect and get device info
             try:
                 device_info = await self._async_get_device_info(host)
 
                 if device_info:
-                    # 成功获取设备信息
+                    # 成功获取设备信息 | Successfully got device info
                     device_id = device_info.get("device_id", host.replace(".", "_"))
 
-                    # 检查设备是否已存在
+                    # 检查设备是否已存在 | Check if device already exists
                     await self.async_set_unique_id(device_id)
                     self._abort_if_unique_id_configured()
 
                     # 设备信息获取成功 | Device info retrieved successfully
                     _LOGGER.info("Device info retrieved: %s", device_info)
 
-                    # 创建配置入口
+                    # 创建配置入口 | Create config entry
                     return self.async_create_entry(
                         title=device_info.get("name", f"Seeed HA ({host})"),
                         data={
@@ -171,14 +172,14 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unknown error during connection: %s", err)
                 errors["base"] = "unknown"
 
-        # 显示输入表单
+        # 显示输入表单 | Show input form
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    # 设备地址 - 必填
+                    # 设备地址 - 必填 | Device address - required
                     vol.Required(CONF_HOST): str,
-                    # WebSocket 端口 - 可选，默认 81
+                    # WebSocket 端口 - 可选，默认 81 | WebSocket port - optional, default 81
                     vol.Optional(CONF_PORT, default=DEFAULT_WS_PORT): int,
                 }
             ),
@@ -196,15 +197,15 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         设备通过广播 _seeed_ha._tcp 服务被发现。
 
         参数 | Args:
-            discovery_info: mDNS 发现的设备信息
+            discovery_info: mDNS 发现的设备信息 | mDNS discovered device info
 
         返回 | Returns:
-            FlowResult: 跳转到确认步骤
+            FlowResult: 跳转到确认步骤 | Jump to confirm step
         """
-    # 发现 WiFi 设备 | Discovered WiFi device
-    _LOGGER.info("Discovered Seeed HA WiFi device: %s", discovery_info)
+        # 发现 WiFi 设备 | Discovered WiFi device
+        _LOGGER.info("Discovered Seeed HA WiFi device: %s", discovery_info)
 
-        # 从发现信息中提取设备数据
+        # 从发现信息中提取设备数据 | Extract device data from discovery info
         host = discovery_info.host
         port = discovery_info.port or DEFAULT_WS_PORT
         properties = discovery_info.properties
@@ -218,11 +219,11 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # 设备信息 | Device info
         _LOGGER.info("Device ID: %s, Name: %s, Model: %s", device_id, device_name, model)
 
-        # 设置唯一 ID，如果设备已配置则更新其地址
+        # 设置唯一 ID，如果设备已配置则更新其地址 | Set unique ID, update address if configured
         await self.async_set_unique_id(device_id)
         self._abort_if_unique_id_configured(updates={CONF_HOST: host})
 
-        # 保存发现的设备信息
+        # 保存发现的设备信息 | Save discovered device info
         self._host = host
         self._port = port
         self._device_id = device_id
@@ -230,10 +231,10 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._model = model
         self._connection_type = CONNECTION_TYPE_WIFI
 
-        # 设置通知中显示的设备名称
+        # 设置通知中显示的设备名称 | Set device name shown in notification
         self.context["title_placeholders"] = {"name": device_name}
 
-        # 跳转到确认步骤
+        # 跳转到确认步骤 | Jump to confirm step
         return await self.async_step_zeroconf_confirm()
 
     async def async_step_zeroconf_confirm(
@@ -247,10 +248,10 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         Shows device info and asks user to confirm addition.
 
         参数 | Args:
-            user_input: 用户确认后为空字典，取消为 None
+            user_input: 用户确认后为空字典，取消为 None | Empty dict after confirm, None if cancelled
 
         返回 | Returns:
-            FlowResult: 创建配置入口或显示确认表单
+            FlowResult: 创建配置入口或显示确认表单 | Create entry or show confirm form
         """
         if user_input is not None:
             # 用户点击了确认，创建配置入口 | User confirmed, create config entry
@@ -267,7 +268,7 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 },
             )
 
-        # 显示确认表单
+        # 显示确认表单 | Show confirm form
         return self.async_show_form(
             step_id="zeroconf_confirm",
             description_placeholders={
@@ -278,7 +279,7 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     # =========================================================================
-    # BLE 设备发现流程
+    # BLE 设备发现流程 | BLE Device Discovery Flow
     # =========================================================================
 
     async def async_step_bluetooth(
@@ -292,12 +293,12 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         设备通过广播 BTHome 格式的数据被发现。
 
         参数 | Args:
-            discovery_info: 蓝牙发现的设备信息
+            discovery_info: 蓝牙发现的设备信息 | Bluetooth discovered device info
 
         返回 | Returns:
-            FlowResult: 跳转到确认步骤
+            FlowResult: 跳转到确认步骤 | Jump to confirm step
         """
-        _LOGGER.info("发现 Seeed HA BLE 设备: %s (%s)", 
+        _LOGGER.info("Discovered Seeed HA BLE device: %s (%s)", 
                      discovery_info.name, discovery_info.address)
 
         # 检查是否是有效的 Seeed/BTHome 设备 | Check if valid Seeed/BTHome device
@@ -311,18 +312,18 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             _LOGGER.debug("Cannot parse BLE advertisement data")
             return self.async_abort(reason="not_supported")
 
-        # 使用 BLE 地址作为唯一 ID
+        # 使用 BLE 地址作为唯一 ID | Use BLE address as unique ID
         device_id = f"ble_{discovery_info.address.replace(':', '_').lower()}"
 
-        # 设置唯一 ID
+        # 设置唯一 ID | Set unique ID
         await self.async_set_unique_id(device_id)
         self._abort_if_unique_id_configured()
 
-        # 保存发现的设备信息
+        # 保存发现的设备信息 | Save discovered device info
         self._ble_address = discovery_info.address
         self._device_id = device_id
         self._device_name = device.name
-        self._model = "XIAO BLE"  # 默认型号
+        self._model = "XIAO BLE"  # 默认型号 | Default model
         self._connection_type = CONNECTION_TYPE_BLE
 
         # 检查是否支持控制服务 | Check if control service is supported
@@ -341,7 +342,7 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if not self._ble_control:
             _LOGGER.info("BLE device supports sensor only: %s", self._ble_address)
 
-        # 保存传感器信息用于显示
+        # 保存传感器信息用于显示 | Save sensor info for display
         self._ble_sensors = [
             f"{s.name}: {s.value} {s.unit or ''}" for s in device.sensors
         ]
@@ -352,7 +353,7 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if self._ble_control:
             binary_sensors = [s for s in device.sensors if s.device_class in [None, "power", "opening"]]
             if binary_sensors:
-                # 默认名称 | Default names
+                # 默认开关名称 | Default switch names
                 switch_names = ["Click", "Double Click", "Long Press"]
                 for i, sensor in enumerate(binary_sensors):
                     name = switch_names[i] if i < len(switch_names) else f"Switch {i+1}"
@@ -365,10 +366,10 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         
         self._switch_configs = switch_configs
 
-        # 设置通知中显示的设备名称
+        # 设置通知中显示的设备名称 | Set device name shown in notification
         self.context["title_placeholders"] = {"name": device.name}
 
-        # 跳转到确认步骤
+        # 跳转到确认步骤 | Jump to confirm step
         return await self.async_step_bluetooth_confirm()
 
     async def async_step_bluetooth_confirm(
@@ -382,10 +383,10 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         Shows device info and current sensor data, asks user to confirm addition.
 
         参数 | Args:
-            user_input: 用户确认后为空字典，取消为 None
+            user_input: 用户确认后为空字典，取消为 None | Empty dict after confirm, None if cancelled
 
         返回 | Returns:
-            FlowResult: 创建配置入口或显示确认表单
+            FlowResult: 创建配置入口或显示确认表单 | Create entry or show confirm form
         """
         if user_input is not None:
             # 用户点击了确认，创建配置入口 | User confirmed, create config entry
@@ -414,7 +415,7 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         sensors_str = ", ".join(self._ble_sensors) if self._ble_sensors else "None"
         control_str = "Yes (supports switch control)" if self._ble_control else "No (sensor only)"
 
-        # 显示确认表单
+        # 显示确认表单 | Show confirm form
         return self.async_show_form(
             step_id="bluetooth_confirm",
             description_placeholders={
@@ -427,7 +428,7 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     # =========================================================================
-    # 辅助方法
+    # 辅助方法 | Helper Methods
     # =========================================================================
 
     async def _async_get_device_info(self, host: str) -> dict[str, Any] | None:
@@ -439,10 +440,10 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         ESP32 device provides JSON device info at /info endpoint.
 
         参数 | Args:
-            host: 设备 IP 地址
+            host: 设备 IP 地址 | Device IP address
 
         返回 | Returns:
-            dict: 设备信息字典，失败时返回 None
+            dict: 设备信息字典，失败时返回 None | Device info dict, None on failure
         """
         session = async_get_clientsession(self.hass)
         url = f"http://{host}:{DEFAULT_HTTP_PORT}/info"

@@ -156,7 +156,8 @@ async def _async_setup_ble_entry(hass: HomeAssistant, entry: ConfigEntry) -> boo
         "ble_control": ble_control,
     }
 
-    # 加载平台
+    # 加载平台（BLE 设备不支持摄像头）
+    # Load platforms (BLE devices don't support camera)
     platforms = ["sensor"]
     if ble_control:
         platforms.append("switch")

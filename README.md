@@ -27,6 +27,7 @@ With just a few lines of code in **Arduino IDE** or **PlatformIO** for your **XI
 |---------|-----------|------|-----|
 | 📤 **Report Sensor Data** | Device → HA | ✅ | ✅ |
 | 📥 **Receive Control Commands** | HA → Device | ✅ | ✅ (GATT) |
+| 📷 **Camera Streaming** | Device → HA | ✅ (ESP32-S3) | ❌ |
 | 🔄 **Get HA States** | HA → Device | *Coming Soon* | ❌ |
 | 🔋 **Ultra-Low Power** | - | ❌ | ✅ (Broadcast Mode) |
 
@@ -53,6 +54,7 @@ Click the button below to add this integration to your Home Assistant:
 - 🎯 **Simple to Use** - Connect sensors to HA with just a few lines of code
 - 🌡️ **Sensor Support** - Support for temperature, humidity, and various other sensors (upstream data)
 - 💡 **Switch Control** - Support for LED, relay, and other switch controls (downstream commands)
+- 📷 **Camera Streaming** - Support XIAO ESP32-S3 Sense camera live feed (v2.2 New)
 - 📱 **Status Page** - Built-in web page to view device status
 
 ### BLE Version (v2.0 New)
@@ -262,6 +264,64 @@ void loop() {
 }
 ```
 
+#### WiFi Example - Camera Streaming (XIAO ESP32-S3 Sense)
+
+```cpp
+#include <SeeedHADiscovery.h>
+#include "esp_camera.h"
+
+const char* WIFI_SSID = "Your_WiFi_SSID";
+const char* WIFI_PASSWORD = "Your_WiFi_Password";
+
+SeeedHADiscovery ha;
+
+void setup() {
+    Serial.begin(115200);
+    
+    // Initialize camera (XIAO ESP32-S3 Sense specific pins)
+    camera_config_t config;
+    config.pin_pwdn = -1;
+    config.pin_reset = -1;
+    config.pin_xclk = 10;
+    config.pin_sccb_sda = 40;
+    config.pin_sccb_scl = 39;
+    config.pin_d7 = 48;
+    config.pin_d6 = 11;
+    config.pin_d5 = 12;
+    config.pin_d4 = 14;
+    config.pin_d3 = 16;
+    config.pin_d2 = 18;
+    config.pin_d1 = 17;
+    config.pin_d0 = 15;
+    config.pin_vsync = 38;
+    config.pin_href = 47;
+    config.pin_pclk = 13;
+    config.xclk_freq_hz = 20000000;
+    config.pixel_format = PIXFORMAT_JPEG;
+    config.frame_size = FRAMESIZE_VGA;
+    config.jpeg_quality = 12;
+    config.fb_count = 2;
+    config.grab_mode = CAMERA_GRAB_LATEST;
+    
+    esp_camera_init(&config);
+    
+    ha.setDeviceInfo("XIAO Camera", "XIAO ESP32-S3 Sense", "1.0.0");
+    ha.begin(WIFI_SSID, WIFI_PASSWORD);
+    
+    // Start camera server on port 82
+    // Still image: http://<IP>:82/camera
+    // MJPEG stream: http://<IP>:82/stream
+    startCameraServer();
+}
+
+void loop() {
+    ha.handle();
+}
+```
+
+> **Note**: Camera example requires XIAO ESP32-S3 Sense with OV2640 camera module.
+> Make sure to enable PSRAM in Arduino IDE: Tools → PSRAM → OPI PSRAM
+
 #### BLE Example - Temperature and Humidity Sensor (Ultra-Low Power)
 
 ```cpp
@@ -450,13 +510,14 @@ seeed-ha-discovery/
 ├── custom_components/
 │   └── seeed_ha_discovery/       # Home Assistant Integration
 │       ├── __init__.py           # Main entry
-│       ├── manifest.json         # Integration manifest (v2.1.0)
+│       ├── manifest.json         # Integration manifest (v2.2.0)
 │       ├── config_flow.py        # Configuration flow
 │       ├── const.py              # Constants definition
 │       ├── coordinator.py        # Data coordinator
 │       ├── device.py             # Device communication
 │       ├── sensor.py             # Sensor platform
 │       ├── switch.py             # Switch platform
+│       ├── camera.py             # Camera platform (v2.2 New)
 │       ├── strings.json          # Strings
 │       └── translations/         # Translation files
 ├── arduino/
@@ -467,7 +528,8 @@ seeed-ha-discovery/
 │   │   ├── examples/
 │   │   │   ├── TemperatureHumidity/  # Temperature/Humidity sensor example
 │   │   │   ├── LEDSwitch/            # LED switch example
-│   │   │   └── ButtonSwitch/         # Button switch example (v1.2)
+│   │   │   ├── ButtonSwitch/         # Button switch example (v1.2)
+│   │   │   └── CameraStream/         # Camera streaming example (v1.3)
 │   │   ├── library.json
 │   │   └── library.properties
 │   └── SeeedHADiscoveryBLE/      # BLE Arduino Library (v2.0 New)
@@ -486,13 +548,16 @@ seeed-ha-discovery/
 
 ## 🔧 Supported Hardware
 
-| Development Board | WiFi | BLE | Status |
-|-------------------|------|-----|--------|
-| XIAO ESP32-C3 | ✅ | ✅ | Tested |
-| XIAO ESP32-C6 | ✅ | ✅ | Tested |
-| XIAO ESP32-S3 | ✅ | ✅ | Tested |
-| XIAO nRF52840 | ❌ | ✅ | Tested |
-| ESP32 (Original) | ✅ | ✅ | Tested |
+| Development Board | WiFi | BLE | Camera | Status |
+|-------------------|------|-----|--------|--------|
+| XIAO ESP32-C3 | ✅ | ✅ | ❌ | Tested |
+| XIAO ESP32-C6 | ✅ | ✅ | ❌ | Tested |
+| XIAO ESP32-S3 | ✅ | ✅ | ❌ | Tested |
+| **XIAO ESP32-S3 Sense** | ✅ | ✅ | ✅ | Tested |
+| XIAO nRF52840 | ❌ | ✅ | ❌ | Tested |
+| ESP32 (Original) | ✅ | ✅ | ❌ | Tested |
+
+> 📷 **Camera feature** only supports **XIAO ESP32-S3 Sense** with OV2640 camera module
 
 ## 📝 Communication Protocols
 
@@ -599,7 +664,24 @@ ble.addSwitch("led", "LED");  // Can add switches and other controllable entitie
 
 Refer to [Home Assistant Sensor Documentation](https://www.home-assistant.io/integrations/sensor/#device-class).
 
-### Q7: Multiple devices using the same code, can HA distinguish them?
+### Q7: How to use the camera feature?
+
+**Hardware Requirements:**
+- XIAO ESP32-S3 Sense (with OV2640 camera module)
+
+**Software Configuration:**
+1. Select board "XIAO_ESP32S3" in Arduino IDE
+2. Enable PSRAM: Tools → PSRAM → OPI PSRAM
+3. Upload the `CameraStream` example
+
+**Access URLs:**
+- Still image: `http://<device_ip>:82/camera`
+- MJPEG stream: `http://<device_ip>:82/stream`
+
+**In Home Assistant:**
+Once the device is discovered, a camera entity will be automatically added with 4 FPS refresh rate.
+
+### Q8: Multiple devices using the same code, can HA distinguish them?
 
 **Yes!** Home Assistant distinguishes each device by its **unique identifier**:
 

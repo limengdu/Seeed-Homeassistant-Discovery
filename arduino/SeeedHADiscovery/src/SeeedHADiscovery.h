@@ -44,7 +44,7 @@
  * ```
  *
  * @author limengdu
- * @version 1.2.0
+ * @version 1.3.0
  * @license MIT
  */
 
@@ -69,7 +69,7 @@
 // =============================================================================
 
 // Library version | 库版本号
-#define SEEED_HA_DISCOVERY_VERSION "1.2.0"
+#define SEEED_HA_DISCOVERY_VERSION "1.3.0"
 
 // Default ports | 默认端口
 #define SEEED_HA_HTTP_PORT 80   // HTTP server port (for device info API) | HTTP 服务器端口（用于设备信息接口）

@@ -27,6 +27,7 @@
 |------|------|------|-----|
 | 📤 **上报传感器数据** | 设备 → HA | ✅ | ✅ |
 | 📥 **接收控制命令** | HA → 设备 | ✅ | ✅ (GATT) |
+| 📷 **摄像头推流** | 设备 → HA | ✅ (ESP32-S3) | ❌ |
 | 🔄 **获取 HA 状态** | HA → 设备 | *即将支持* | ❌ |
 | 🔋 **超低功耗** | - | ❌ | ✅ (广播模式) |
 
@@ -53,6 +54,7 @@
 - 🎯 **简单易用** - 几行代码即可将传感器接入 HA
 - 🌡️ **传感器支持** - 支持温度、湿度等各类传感器（上行数据）
 - 💡 **开关控制** - 支持 LED、继电器等开关控制（下行命令）
+- 📷 **摄像头推流** - 支持 XIAO ESP32-S3 Sense 摄像头实时画面 (v2.2 新增)
 - 📱 **状态页面** - 内置 Web 页面查看设备状态
 
 ### BLE 版本 (v2.0 新增)
@@ -262,6 +264,64 @@ void loop() {
 }
 ```
 
+#### WiFi 示例 - 摄像头推流 (XIAO ESP32-S3 Sense)
+
+```cpp
+#include <SeeedHADiscovery.h>
+#include "esp_camera.h"
+
+const char* WIFI_SSID = "Your_WiFi_SSID";
+const char* WIFI_PASSWORD = "Your_WiFi_Password";
+
+SeeedHADiscovery ha;
+
+void setup() {
+    Serial.begin(115200);
+    
+    // Initialize camera (XIAO ESP32-S3 Sense specific pins)
+    camera_config_t config;
+    config.pin_pwdn = -1;
+    config.pin_reset = -1;
+    config.pin_xclk = 10;
+    config.pin_sccb_sda = 40;
+    config.pin_sccb_scl = 39;
+    config.pin_d7 = 48;
+    config.pin_d6 = 11;
+    config.pin_d5 = 12;
+    config.pin_d4 = 14;
+    config.pin_d3 = 16;
+    config.pin_d2 = 18;
+    config.pin_d1 = 17;
+    config.pin_d0 = 15;
+    config.pin_vsync = 38;
+    config.pin_href = 47;
+    config.pin_pclk = 13;
+    config.xclk_freq_hz = 20000000;
+    config.pixel_format = PIXFORMAT_JPEG;
+    config.frame_size = FRAMESIZE_VGA;
+    config.jpeg_quality = 12;
+    config.fb_count = 2;
+    config.grab_mode = CAMERA_GRAB_LATEST;
+    
+    esp_camera_init(&config);
+    
+    ha.setDeviceInfo("XIAO Camera", "XIAO ESP32-S3 Sense", "1.0.0");
+    ha.begin(WIFI_SSID, WIFI_PASSWORD);
+    
+    // Start camera server on port 82
+    // Still image: http://<IP>:82/camera
+    // MJPEG stream: http://<IP>:82/stream
+    startCameraServer();
+}
+
+void loop() {
+    ha.handle();
+}
+```
+
+> **Note**: Camera example requires XIAO ESP32-S3 Sense with OV2640 camera module.
+> Make sure to enable PSRAM in Arduino IDE: Tools → PSRAM → OPI PSRAM
+
 #### BLE 示例 - 温湿度传感器 (超低功耗)
 
 ```cpp
@@ -450,13 +510,14 @@ seeed-ha-discovery/
 ├── custom_components/
 │   └── seeed_ha_discovery/       # Home Assistant 集成
 │       ├── __init__.py           # 主入口
-│       ├── manifest.json         # 集成清单 (v2.0.0)
+│       ├── manifest.json         # 集成清单 (v2.2.0)
 │       ├── config_flow.py        # 配置流程
 │       ├── const.py              # 常量定义
 │       ├── coordinator.py        # 数据协调器
 │       ├── device.py             # 设备通信
 │       ├── sensor.py             # 传感器平台
 │       ├── switch.py             # 开关平台
+│       ├── camera.py             # 摄像头平台 (v2.2 新增)
 │       ├── strings.json          # 字符串
 │       └── translations/         # 翻译文件
 ├── arduino/
@@ -467,7 +528,8 @@ seeed-ha-discovery/
 │   │   ├── examples/
 │   │   │   ├── TemperatureHumidity/  # 温湿度传感器示例
 │   │   │   ├── LEDSwitch/            # LED 开关示例
-│   │   │   └── ButtonSwitch/         # 按钮开关示例 (v1.1)
+│   │   │   ├── ButtonSwitch/         # 按钮开关示例 (v1.1)
+│   │   │   └── CameraStream/         # 摄像头推流示例 (v1.3)
 │   │   ├── library.json
 │   │   └── library.properties
 │   └── SeeedHADiscoveryBLE/      # BLE Arduino 库 (v2.0 新增)
@@ -486,13 +548,16 @@ seeed-ha-discovery/
 
 ## 🔧 支持的硬件
 
-| 开发板 | WiFi | BLE | 状态 |
-|--------|------|-----|------|
-| XIAO ESP32-C3 | ✅ | ✅ | 已测试 |
-| XIAO ESP32-C6 | ✅ | ✅ | 已测试 |
-| XIAO ESP32-S3 | ✅ | ✅ | 已测试 |
-| XIAO nRF52840 | ❌ | ✅ | 已测试 |
-| ESP32 (原版) | ✅ | ✅ | 已测试 |
+| 开发板 | WiFi | BLE | 摄像头 | 状态 |
+|--------|------|-----|--------|------|
+| XIAO ESP32-C3 | ✅ | ✅ | ❌ | 已测试 |
+| XIAO ESP32-C6 | ✅ | ✅ | ❌ | 已测试 |
+| XIAO ESP32-S3 | ✅ | ✅ | ❌ | 已测试 |
+| **XIAO ESP32-S3 Sense** | ✅ | ✅ | ✅ | 已测试 |
+| XIAO nRF52840 | ❌ | ✅ | ❌ | 已测试 |
+| ESP32 (原版) | ✅ | ✅ | ❌ | 已测试 |
+
+> 📷 **摄像头功能**仅支持带 OV2640 摄像头模块的 **XIAO ESP32-S3 Sense**
 
 ## 📝 通信协议
 
@@ -599,7 +664,24 @@ ble.addSwitch("led", "LED");  // 可以添加开关等可控实体
 
 参考 [Home Assistant 传感器文档](https://www.home-assistant.io/integrations/sensor/#device-class)。
 
-### Q7: 多个设备使用相同代码，HA 能区分吗？
+### Q7: 如何使用摄像头功能？
+
+**硬件要求：**
+- XIAO ESP32-S3 Sense（带 OV2640 摄像头模块）
+
+**软件配置：**
+1. 在 Arduino IDE 中选择开发板 "XIAO_ESP32S3"
+2. 启用 PSRAM: Tools → PSRAM → OPI PSRAM
+3. 上传 `CameraStream` 示例
+
+**访问方式：**
+- 静态图片: `http://<设备IP>:82/camera`
+- MJPEG 视频流: `http://<设备IP>:82/stream`
+
+**在 Home Assistant 中：**
+设备被发现后，会自动添加一个摄像头实体，以 4 FPS 刷新率显示画面。
+
+### Q8: 多个设备使用相同代码，HA 能区分吗？
 
 **可以！** Home Assistant 通过每个设备的**唯一标识**来区分：
 
