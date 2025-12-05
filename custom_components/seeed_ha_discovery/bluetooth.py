@@ -93,11 +93,13 @@ def parse_bthome_data(data: bytes) -> tuple[list[BTHomeSensorData], list[dict[st
     is_encrypted = bool(device_info & BTHOME_DEVICE_INFO_ENCRYPT)
 
     if is_encrypted:
-        _LOGGER.debug("BTHome 数据已加密，跳过解析")
+        # BTHome 数据已加密 | BTHome data is encrypted
+        _LOGGER.debug("BTHome data is encrypted, skipping parse")
         return [], [], is_v2, is_encrypted
 
     if not is_v2:
-        _LOGGER.debug("不是 BTHome v2 格式")
+        # 不是 BTHome v2 格式 | Not BTHome v2 format
+        _LOGGER.debug("Not BTHome v2 format")
         return [], [], is_v2, is_encrypted
 
     # 从第二个字节开始解析传感器数据
@@ -121,15 +123,17 @@ def parse_bthome_data(data: bytes) -> tuple[list[BTHomeSensorData], list[dict[st
             is_event = True
 
         if sensor_info is None:
-            _LOGGER.debug("未知的 Object ID: 0x%02X", object_id)
-            # 尝试跳过未知数据（假设 2 字节）
+            # 未知的 Object ID | Unknown Object ID
+            _LOGGER.debug("Unknown Object ID: 0x%02X", object_id)
+            # 尝试跳过未知数据（假设 2 字节）| Try to skip unknown data (assume 2 bytes)
             offset += 2
             continue
 
         # 根据 Object ID 获取数据大小
         data_size = _get_data_size(object_id)
         if offset + data_size > len(data):
-            _LOGGER.warning("数据不完整: 需要 %d 字节，只有 %d 字节", data_size, len(data) - offset)
+            # 数据不完整 | Incomplete data
+            _LOGGER.warning("Incomplete data: need %d bytes, only have %d bytes", data_size, len(data) - offset)
             break
 
         # 读取值
@@ -259,19 +263,21 @@ def parse_ble_advertisement(
     返回 | Returns:
         SeeedBLEDevice: 解析后的设备数据，如果不是有效的 Seeed/BTHome 设备则返回 None
     """
+    # 解析 BLE 广播 | Parsing BLE advertisement
     _LOGGER.debug(
-        "解析 BLE 广播: %s (%s), RSSI: %d",
+        "Parsing BLE advertisement: %s (%s), RSSI: %d",
         service_info.name,
         service_info.address,
         service_info.rssi,
     )
 
-    # 检查是否有 BTHome Service Data
+    # 检查是否有 BTHome Service Data | Check for BTHome Service Data
     service_data = service_info.service_data
     bthome_data = service_data.get(BTHOME_SERVICE_UUID)
 
     if bthome_data is None:
-        _LOGGER.debug("没有 BTHome Service Data")
+        # 没有 BTHome Service Data | No BTHome Service Data
+        _LOGGER.debug("No BTHome Service Data")
         return None
 
     _LOGGER.debug("BTHome Service Data: %s", bthome_data.hex())
@@ -289,8 +295,9 @@ def parse_ble_advertisement(
                 break
 
     # 如果没有传感器/事件，也没有控制服务，则不是有效设备
+    # If no sensors/events and no control service, not a valid device
     if not sensors and not events and not has_control_service and not is_v2:
-        _LOGGER.debug("没有解析到传感器或事件数据，也没有控制服务")
+        _LOGGER.debug("No sensors, events, or control service found")
         return None
 
     # 创建设备对象
@@ -305,8 +312,9 @@ def parse_ble_advertisement(
         raw_data=bthome_data,
     )
 
+    # 发现 Seeed BLE 设备 | Found Seeed BLE device
     _LOGGER.info(
-        "发现 Seeed BLE 设备: %s (%s), 传感器: %d, 事件: %d, 控制服务: %s",
+        "Found Seeed BLE device: %s (%s), sensors: %d, events: %d, control_service: %s",
         device.name,
         device.short_address,
         len(device.sensors),

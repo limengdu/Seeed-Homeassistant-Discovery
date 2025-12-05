@@ -72,7 +72,10 @@ async def _async_setup_ble_switches(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """设置 BLE 设备开关"""
+    """
+    设置 BLE 设备开关
+    Set up BLE device switches.
+    """
     from .ble_switch import async_setup_ble_switches
 
     manager = await async_setup_ble_switches(hass, entry, async_add_entities)
@@ -87,40 +90,47 @@ async def _async_setup_wifi_switches(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """设置 WiFi 设备开关"""
+    """
+    设置 WiFi 设备开关
+    Set up WiFi device switches.
+    """
     from .coordinator import SeeedHACoordinator
 
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator: SeeedHACoordinator = data["coordinator"]
 
-    _LOGGER.info("设置 WiFi 开关平台，设备: %s", entry.data.get(CONF_DEVICE_ID))
+    # 设置 WiFi 开关平台 | Setting up WiFi switch platform
+    _LOGGER.info("Setting up WiFi switch platform, device: %s", entry.data.get(CONF_DEVICE_ID))
 
     entities = []
     for entity_id, entity_config in coordinator.device.entities.items():
         if entity_config.get("type") == "switch":
-            _LOGGER.info("创建开关: %s (%s)", entity_id, entity_config.get("name"))
+            _LOGGER.info("Creating switch: %s (%s)", entity_id, entity_config.get("name"))
             entities.append(SeeedHASwitch(coordinator, entity_config, entry))
 
     if entities:
         async_add_entities(entities)
-        _LOGGER.info("已添加 %d 个开关", len(entities))
+        _LOGGER.info("Added %d switches", len(entities))
 
     def handle_discovery(data: dict[str, Any]) -> None:
-        """处理新发现的开关"""
+        """
+        处理新发现的开关
+        Handle newly discovered switches.
+        """
         new_entities = []
 
         for entity_id, entity_config in coordinator.device.entities.items():
             if entity_config.get("type") == "switch":
                 existing_ids = [e._entity_id for e in entities]
                 if entity_id not in existing_ids:
-                    _LOGGER.info("发现新开关: %s", entity_id)
+                    _LOGGER.info("Discovered new switch: %s", entity_id)
                     new_entity = SeeedHASwitch(coordinator, entity_config, entry)
                     entities.append(new_entity)
                     new_entities.append(new_entity)
 
         if new_entities:
             async_add_entities(new_entities)
-            _LOGGER.info("动态添加 %d 个新开关", len(new_entities))
+            _LOGGER.info("Dynamically added %d new switches", len(new_entities))
 
     coordinator.device.add_discovery_callback(handle_discovery)
 
@@ -139,7 +149,10 @@ class SeeedHASwitch(CoordinatorEntity, SwitchEntity):
         entity_config: dict[str, Any],
         entry: ConfigEntry,
     ) -> None:
-        """初始化开关"""
+        """
+        初始化开关
+        Initialize switch.
+        """
         super().__init__(coordinator)
 
         self._entry = entry
@@ -153,17 +166,21 @@ class SeeedHASwitch(CoordinatorEntity, SwitchEntity):
         if icon := entity_config.get("icon"):
             self._attr_icon = icon
 
-        _LOGGER.info("开关初始化完成: %s (图标=%s)", self._attr_name, entity_config.get("icon"))
+        # 开关初始化完成 | Switch initialization complete
+        _LOGGER.info("Switch initialized: %s (icon=%s)", self._attr_name, entity_config.get("icon"))
 
     @property
     def device_info(self) -> DeviceInfo:
-        """返回设备信息"""
+        """
+        返回设备信息
+        Return device info.
+        """
         device_data = self.coordinator.device.device_info
         entry_data = self._entry.data
 
         return DeviceInfo(
             identifiers={(DOMAIN, entry_data.get(CONF_DEVICE_ID, ""))},
-            name=device_data.get("name", "Seeed HA 设备"),
+            name=device_data.get("name", "Seeed HA Device"),
             manufacturer=MANUFACTURER,
             model=entry_data.get(CONF_MODEL, device_data.get("model", "ESP32")),
             sw_version=device_data.get("version", "1.0.0"),
@@ -171,40 +188,56 @@ class SeeedHASwitch(CoordinatorEntity, SwitchEntity):
 
     @property
     def available(self) -> bool:
-        """返回实体是否可用"""
+        """
+        返回实体是否可用
+        Return if entity is available.
+        """
         return self.coordinator.device.connected
 
     @property
     def is_on(self) -> bool:
-        """返回开关的当前状态"""
+        """
+        返回开关的当前状态
+        Return current switch state.
+        """
         entities = self.coordinator.device.entities
 
         if self._entity_id in entities:
             state = entities[self._entity_id].get("state")
-            _LOGGER.debug("开关 %s 当前状态: %s", self._entity_id, state)
+            # 开关当前状态 | Switch current state
+            _LOGGER.debug("Switch %s current state: %s", self._entity_id, state)
             return bool(state)
 
         return False
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """打开开关"""
-        _LOGGER.info("发送开关命令: %s -> turn_on", self._entity_id)
+        """
+        打开开关
+        Turn on the switch.
+        """
+        _LOGGER.info("Sending switch command: %s -> turn_on", self._entity_id)
         await self.coordinator.device.async_send_command(
             self._entity_id,
             command="turn_on"
         )
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """关闭开关"""
-        _LOGGER.info("发送开关命令: %s -> turn_off", self._entity_id)
+        """
+        关闭开关
+        Turn off the switch.
+        """
+        _LOGGER.info("Sending switch command: %s -> turn_off", self._entity_id)
         await self.coordinator.device.async_send_command(
             self._entity_id,
             command="turn_off"
         )
 
     async def async_toggle(self, **kwargs: Any) -> None:
-        """切换开关状态"""
-        _LOGGER.info("发送开关命令: %s -> toggle", self._entity_id)
+        """
+        切换开关状态
+        Toggle the switch.
+        """
+        _LOGGER.info("Sending switch command: %s -> toggle", self._entity_id)
         await self.coordinator.device.async_send_command(
             self._entity_id,
             command="toggle"
@@ -212,7 +245,10 @@ class SeeedHASwitch(CoordinatorEntity, SwitchEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """返回额外的状态属性"""
+        """
+        返回额外的状态属性
+        Return extra state attributes.
+        """
         entities = self.coordinator.device.entities
 
         if self._entity_id in entities:

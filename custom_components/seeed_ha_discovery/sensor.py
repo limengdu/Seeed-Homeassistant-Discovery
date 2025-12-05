@@ -116,44 +116,46 @@ async def _async_setup_wifi_sensors(
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator: SeeedHACoordinator = data["coordinator"]
 
-    _LOGGER.info("设置 WiFi 传感器平台，设备: %s", entry.data.get(CONF_DEVICE_ID))
+    # 设置 WiFi 传感器平台 | Setting up WiFi sensor platform
+    _LOGGER.info("Setting up WiFi sensor platform, device: %s", entry.data.get(CONF_DEVICE_ID))
 
     # 创建已发现的传感器实体
     entities = []
     for entity_id, entity_config in coordinator.device.entities.items():
-        # 只处理 sensor 类型的实体
+        # 只处理 sensor 类型的实体 | Only process sensor type entities
         if entity_config.get("type") == "sensor":
-            _LOGGER.info("创建传感器: %s (%s)", entity_id, entity_config.get("name"))
+            _LOGGER.info("Creating sensor: %s (%s)", entity_id, entity_config.get("name"))
             entities.append(SeeedHASensor(coordinator, entity_config, entry))
 
-    # 添加实体到 HA
+    # 添加实体到 HA | Add entities to HA
     if entities:
         async_add_entities(entities)
-        _LOGGER.info("已添加 %d 个传感器", len(entities))
+        _LOGGER.info("Added %d sensors", len(entities))
 
-    # 注册发现回调，处理后续发现的传感器
+    # 注册发现回调，处理后续发现的传感器 | Register discovery callback
     def handle_discovery(data: dict[str, Any]) -> None:
         """
         处理新发现的传感器
         Handle newly discovered sensors.
 
         当设备报告新的传感器时，动态创建实体。
+        Dynamically create entities when device reports new sensors.
         """
         new_entities = []
 
         for entity_id, entity_config in coordinator.device.entities.items():
             if entity_config.get("type") == "sensor":
-                # 检查实体是否已存在
+                # 检查实体是否已存在 | Check if entity already exists
                 existing_ids = [e._entity_id for e in entities]
                 if entity_id not in existing_ids:
-                    _LOGGER.info("发现新传感器: %s", entity_id)
+                    _LOGGER.info("Discovered new sensor: %s", entity_id)
                     new_entity = SeeedHASensor(coordinator, entity_config, entry)
                     entities.append(new_entity)
                     new_entities.append(new_entity)
 
         if new_entities:
             async_add_entities(new_entities)
-            _LOGGER.info("动态添加 %d 个新传感器", len(new_entities))
+            _LOGGER.info("Dynamically added %d new sensors", len(new_entities))
 
     # 注册回调
     coordinator.device.add_discovery_callback(handle_discovery)
@@ -219,15 +221,15 @@ class SeeedHASensor(CoordinatorEntity, SensorEntity):
         # 设置传感器特定属性 | Set sensor-specific attributes
         # =====================================================================
 
-        # 设备类别 - 如 temperature, humidity
-        # 影响 UI 显示的图标和格式
+        # 设备类别 - 如 temperature, humidity | Device class
+        # 影响 UI 显示的图标和格式 | Affects UI icon and formatting
         device_class = entity_config.get("device_class")
         if device_class:
             try:
                 self._attr_device_class = SensorDeviceClass(device_class)
-                _LOGGER.debug("设置设备类别: %s", device_class)
+                _LOGGER.debug("Set device class: %s", device_class)
             except ValueError:
-                _LOGGER.warning("未知的设备类别: %s", device_class)
+                _LOGGER.warning("Unknown device class: %s", device_class)
 
         # 状态类别 - 如 measurement, total, total_increasing
         # 影响历史记录和统计
@@ -238,22 +240,23 @@ class SeeedHASensor(CoordinatorEntity, SensorEntity):
             except ValueError:
                 self._attr_state_class = SensorStateClass.MEASUREMENT
 
-        # 单位 - 如 °C, %
+        # 单位 - 如 °C, % | Unit
         if unit := entity_config.get("unit_of_measurement"):
             self._attr_native_unit_of_measurement = unit
-            _LOGGER.debug("设置单位: %s", unit)
+            _LOGGER.debug("Set unit: %s", unit)
 
-        # 精度 - 小数位数
+        # 精度 - 小数位数 | Precision - decimal places
         if precision := entity_config.get("precision"):
             self._attr_suggested_display_precision = precision
-            _LOGGER.debug("设置精度: %d", precision)
+            _LOGGER.debug("Set precision: %d", precision)
 
         # 图标 - 如 mdi:thermometer
         if icon := entity_config.get("icon"):
             self._attr_icon = icon
 
+        # 传感器初始化完成 | Sensor initialization complete
         _LOGGER.info(
-            "传感器初始化完成: %s (类别=%s, 单位=%s)",
+            "Sensor initialized: %s (class=%s, unit=%s)",
             self._attr_name,
             device_class,
             entity_config.get("unit_of_measurement"),
@@ -272,15 +275,15 @@ class SeeedHASensor(CoordinatorEntity, SensorEntity):
         entry_data = self._entry.data
 
         return DeviceInfo(
-            # 设备标识符 - 用于关联实体到设备
+            # 设备标识符 - 用于关联实体到设备 | Device identifier
             identifiers={(DOMAIN, entry_data.get(CONF_DEVICE_ID, ""))},
-            # 设备名称
-            name=device_data.get("name", "Seeed HA 设备"),
-            # 制造商
+            # 设备名称 | Device name
+            name=device_data.get("name", "Seeed HA Device"),
+            # 制造商 | Manufacturer
             manufacturer=MANUFACTURER,
-            # 设备型号
+            # 设备型号 | Device model
             model=entry_data.get(CONF_MODEL, device_data.get("model", "ESP32")),
-            # 固件版本
+            # 固件版本 | Firmware version
             sw_version=device_data.get("version", "1.0.0"),
         )
 
@@ -307,7 +310,8 @@ class SeeedHASensor(CoordinatorEntity, SensorEntity):
 
         if self._entity_id in entities:
             value = entities[self._entity_id].get("state")
-            _LOGGER.debug("传感器 %s 当前值: %s", self._entity_id, value)
+            # 传感器当前值 | Sensor current value
+            _LOGGER.debug("Sensor %s current value: %s", self._entity_id, value)
             return value
 
         return None

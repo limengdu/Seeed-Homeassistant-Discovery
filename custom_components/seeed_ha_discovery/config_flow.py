@@ -118,7 +118,8 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             host = user_input[CONF_HOST]
             port = user_input.get(CONF_PORT, DEFAULT_WS_PORT)
 
-            _LOGGER.info("尝试连接到设备: %s:%s", host, port)
+            # 尝试连接到设备 | Trying to connect to device
+            _LOGGER.info("Trying to connect to device: %s:%s", host, port)
 
             # 尝试连接并获取设备信息
             try:
@@ -132,7 +133,8 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     await self.async_set_unique_id(device_id)
                     self._abort_if_unique_id_configured()
 
-                    _LOGGER.info("设备信息获取成功: %s", device_info)
+                    # 设备信息获取成功 | Device info retrieved successfully
+                    _LOGGER.info("Device info retrieved: %s", device_info)
 
                     # 创建配置入口
                     return self.async_create_entry(
@@ -146,15 +148,17 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         },
                     )
                 else:
-                    # 无法获取设备信息
-                    _LOGGER.warning("无法获取设备信息: %s", host)
+                    # 无法获取设备信息 | Cannot get device info
+                    _LOGGER.warning("Cannot get device info: %s", host)
                     errors["base"] = "cannot_connect"
 
             except asyncio.TimeoutError:
-                _LOGGER.warning("连接超时: %s", host)
+                # 连接超时 | Connection timeout
+                _LOGGER.warning("Connection timeout: %s", host)
                 errors["base"] = "timeout"
             except Exception as err:
-                _LOGGER.exception("连接时发生未知错误: %s", err)
+                # 连接时发生未知错误 | Unknown error during connection
+                _LOGGER.exception("Unknown error during connection: %s", err)
                 errors["base"] = "unknown"
 
         # 显示输入表单
@@ -187,8 +191,8 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         返回 | Returns:
             FlowResult: 跳转到确认步骤
         """
-        _LOGGER.info("发现 Seeed HA WiFi 设备: %s", discovery_info)
-        _LOGGER.info("Discovered Seeed HA WiFi device: %s", discovery_info)
+    # 发现 WiFi 设备 | Discovered WiFi device
+    _LOGGER.info("Discovered Seeed HA WiFi device: %s", discovery_info)
 
         # 从发现信息中提取设备数据
         host = discovery_info.host
@@ -201,7 +205,8 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         device_name = properties.get("name", f"Seeed HA ({host})")
         model = properties.get("model", "ESP32")
 
-        _LOGGER.info("设备ID: %s, 名称: %s, 型号: %s", device_id, device_name, model)
+        # 设备信息 | Device info
+        _LOGGER.info("Device ID: %s, Name: %s, Model: %s", device_id, device_name, model)
 
         # 设置唯一 ID，如果设备已配置则更新其地址
         await self.async_set_unique_id(device_id)
@@ -238,8 +243,8 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             FlowResult: 创建配置入口或显示确认表单
         """
         if user_input is not None:
-            # 用户点击了确认，创建配置入口
-            _LOGGER.info("用户确认添加 WiFi 设备: %s", self._device_name)
+            # 用户点击了确认，创建配置入口 | User confirmed, create config entry
+            _LOGGER.info("User confirmed adding WiFi device: %s", self._device_name)
 
             return self.async_create_entry(
                 title=self._device_name or f"Seeed HA ({self._host})",
@@ -285,15 +290,15 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         _LOGGER.info("发现 Seeed HA BLE 设备: %s (%s)", 
                      discovery_info.name, discovery_info.address)
 
-        # 检查是否是有效的 Seeed/BTHome 设备
+        # 检查是否是有效的 Seeed/BTHome 设备 | Check if valid Seeed/BTHome device
         if not is_seeed_ble_device(discovery_info):
-            _LOGGER.debug("不是有效的 Seeed BLE 设备")
+            _LOGGER.debug("Not a valid Seeed BLE device")
             return self.async_abort(reason="not_supported")
 
-        # 解析 BLE 广播数据
+        # 解析 BLE 广播数据 | Parse BLE advertisement data
         device = parse_ble_advertisement(discovery_info)
         if device is None:
-            _LOGGER.debug("无法解析 BLE 广播数据")
+            _LOGGER.debug("Cannot parse BLE advertisement data")
             return self.async_abort(reason="not_supported")
 
         # 使用 BLE 地址作为唯一 ID
@@ -310,19 +315,21 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._model = "XIAO BLE"  # 默认型号
         self._connection_type = CONNECTION_TYPE_BLE
 
-        # 检查是否支持控制服务
+        # 检查是否支持控制服务 | Check if control service is supported
         # 只有在广播中明确包含控制服务 UUID 的设备才启用控制
+        # Only enable control if device explicitly advertises control service UUID
         # 纯传感器设备（如 ButtonBLE、TemperatureBLE）不会广播此 UUID
+        # Pure sensor devices (like ButtonBLE, TemperatureBLE) don't advertise this UUID
         self._ble_control = False
         if discovery_info.service_uuids:
             for uuid in discovery_info.service_uuids:
                 if SEEED_CONTROL_SERVICE_UUID.lower() in uuid.lower():
                     self._ble_control = True
-                    _LOGGER.info("BLE 设备支持控制服务: %s", self._ble_address)
+                    _LOGGER.info("BLE device supports control service: %s", self._ble_address)
                     break
         
         if not self._ble_control:
-            _LOGGER.info("BLE 设备仅支持传感器功能: %s", self._ble_address)
+            _LOGGER.info("BLE device supports sensor only: %s", self._ble_address)
 
         # 保存传感器信息用于显示
         self._ble_sensors = [
@@ -330,19 +337,21 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         ]
 
         # 如果支持控制，根据二进制传感器生成开关配置
+        # If control is supported, generate switch configs based on binary sensors
         switch_configs = []
         if self._ble_control:
             binary_sensors = [s for s in device.sensors if s.device_class in [None, "power", "opening"]]
             if binary_sensors:
-                switch_names = ["单击", "双击", "长按"]  # 默认名称
+                # 默认名称 | Default names
+                switch_names = ["Click", "Double Click", "Long Press"]
                 for i, sensor in enumerate(binary_sensors):
-                    name = switch_names[i] if i < len(switch_names) else f"开关{i+1}"
+                    name = switch_names[i] if i < len(switch_names) else f"Switch {i+1}"
                     switch_configs.append({
                         "index": i,
                         "name": name,
                         "id": f"switch_{i}",
                     })
-                _LOGGER.info("生成 %d 个开关配置", len(switch_configs))
+                _LOGGER.info("Generated %d switch configs", len(switch_configs))
         
         self._switch_configs = switch_configs
 
@@ -369,8 +378,8 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             FlowResult: 创建配置入口或显示确认表单
         """
         if user_input is not None:
-            # 用户点击了确认，创建配置入口
-            _LOGGER.info("用户确认添加 BLE 设备: %s (%s), 控制=%s", 
+            # 用户点击了确认，创建配置入口 | User confirmed, create config entry
+            _LOGGER.info("User confirmed adding BLE device: %s (%s), control=%s", 
                          self._device_name, self._ble_address, self._ble_control)
 
             entry_data = {
@@ -381,19 +390,19 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_BLE_CONTROL: self._ble_control,
             }
             
-            # 如果有开关配置，保存它
+            # 如果有开关配置，保存它 | If there are switch configs, save them
             if hasattr(self, '_switch_configs') and self._switch_configs:
                 entry_data["switch_configs"] = self._switch_configs
-                _LOGGER.info("保存开关配置: %s", self._switch_configs)
+                _LOGGER.info("Saving switch configs: %s", self._switch_configs)
             
             return self.async_create_entry(
                 title=self._device_name or f"Seeed BLE ({self._ble_address})",
                 data=entry_data,
             )
 
-        # 格式化传感器信息用于显示
-        sensors_str = ", ".join(self._ble_sensors) if self._ble_sensors else "无"
-        control_str = "是（支持开关控制）" if self._ble_control else "否（仅传感器）"
+        # 格式化传感器信息用于显示 | Format sensor info for display
+        sensors_str = ", ".join(self._ble_sensors) if self._ble_sensors else "None"
+        control_str = "Yes (supports switch control)" if self._ble_control else "No (sensor only)"
 
         # 显示确认表单
         return self.async_show_form(
@@ -428,21 +437,25 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         session = async_get_clientsession(self.hass)
         url = f"http://{host}:{DEFAULT_HTTP_PORT}/info"
 
-        _LOGGER.debug("请求设备信息: %s", url)
+        # 请求设备信息 | Request device info
+        _LOGGER.debug("Requesting device info: %s", url)
 
         try:
             async with asyncio.timeout(10):
                 async with session.get(url) as response:
                     if response.status == 200:
                         data = await response.json()
-                        _LOGGER.debug("设备信息: %s", data)
+                        _LOGGER.debug("Device info: %s", data)
                         return data
                     else:
-                        _LOGGER.warning("设备返回错误状态码: %s", response.status)
+                        # 设备返回错误状态码 | Device returned error status
+                        _LOGGER.warning("Device returned error status: %s", response.status)
                         return None
         except aiohttp.ClientError as err:
-            _LOGGER.warning("HTTP 请求失败: %s", err)
+            # HTTP 请求失败 | HTTP request failed
+            _LOGGER.warning("HTTP request failed: %s", err)
             return None
         except asyncio.TimeoutError:
-            _LOGGER.warning("HTTP 请求超时")
+            # HTTP 请求超时 | HTTP request timeout
+            _LOGGER.warning("HTTP request timeout")
             raise

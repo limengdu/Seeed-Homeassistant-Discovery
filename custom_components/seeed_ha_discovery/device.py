@@ -183,15 +183,15 @@ class SeeedHADevice:
             bool: 连接是否成功
         """
         try:
-            # 步骤 1: 获取设备信息
-            _LOGGER.info("正在获取设备信息: %s", self.host)
+            # 步骤 1: 获取设备信息 | Step 1: Get device info
+            _LOGGER.info("Getting device info: %s", self.host)
             await self._async_fetch_device_info()
 
-            # 步骤 2: 建立 WebSocket 连接
+            # 步骤 2: 建立 WebSocket 连接 | Step 2: Establish WebSocket connection
             session = async_get_clientsession(self.hass)
             ws_url = f"ws://{self.host}:{self.port}/ws"
 
-            _LOGGER.info("正在连接 WebSocket: %s", ws_url)
+            _LOGGER.info("Connecting to WebSocket: %s", ws_url)
 
             self._ws = await session.ws_connect(
                 ws_url,
@@ -200,7 +200,8 @@ class SeeedHADevice:
             )
 
             self._connected = True
-            _LOGGER.info("WebSocket 连接成功: %s", self.host)
+            # WebSocket 连接成功 | WebSocket connected
+            _LOGGER.info("WebSocket connected: %s", self.host)
 
             # 步骤 3: 启动消息接收循环
             self._receive_task = asyncio.create_task(self._async_receive_loop())
@@ -211,7 +212,8 @@ class SeeedHADevice:
             return True
 
         except Exception as err:
-            _LOGGER.error("连接失败 %s: %s", self.host, err)
+            # 连接失败 | Connection failed
+            _LOGGER.error("Connection failed %s: %s", self.host, err)
             self._connected = False
             return False
 
@@ -223,7 +225,8 @@ class SeeedHADevice:
         清理所有后台任务和连接资源。
         Cleans up all background tasks and connection resources.
         """
-        _LOGGER.info("正在断开连接: %s", self.host)
+        # 正在断开连接 | Disconnecting
+        _LOGGER.info("Disconnecting: %s", self.host)
         self._connected = False
 
         # 取消接收任务
@@ -249,7 +252,8 @@ class SeeedHADevice:
             await self._ws.close()
             self._ws = None
 
-        _LOGGER.info("已断开连接: %s", self.host)
+        # 已断开连接 | Disconnected
+        _LOGGER.info("Disconnected: %s", self.host)
 
     async def _async_fetch_device_info(self) -> None:
         """
@@ -266,11 +270,13 @@ class SeeedHADevice:
                 async with session.get(url) as response:
                     if response.status == 200:
                         self._device_info = await response.json()
-                        _LOGGER.info("设备信息: %s", self._device_info)
+                        _LOGGER.info("Device info: %s", self._device_info)
                     else:
-                        _LOGGER.warning("获取设备信息失败，状态码: %s", response.status)
+                        # 获取设备信息失败 | Failed to get device info
+                        _LOGGER.warning("Failed to get device info, status: %s", response.status)
         except Exception as err:
-            _LOGGER.warning("获取设备信息时出错: %s", err)
+            # 获取设备信息时出错 | Error getting device info
+            _LOGGER.warning("Error getting device info: %s", err)
 
     async def _async_receive_loop(self) -> None:
         """
@@ -287,33 +293,34 @@ class SeeedHADevice:
         if not self._ws:
             return
 
-        _LOGGER.debug("开始消息接收循环")
+        # 开始消息接收循环 | Starting message receive loop
+        _LOGGER.debug("Starting message receive loop")
 
         try:
             async for msg in self._ws:
                 if msg.type == aiohttp.WSMsgType.TEXT:
-                    # 收到文本消息，解析 JSON
+                    # 收到文本消息，解析 JSON | Received text message, parse JSON
                     try:
                         data = json.loads(msg.data)
                         await self._async_handle_message(data)
                     except json.JSONDecodeError:
-                        _LOGGER.warning("收到无效 JSON: %s", msg.data)
+                        _LOGGER.warning("Received invalid JSON: %s", msg.data)
 
                 elif msg.type == aiohttp.WSMsgType.ERROR:
-                    # WebSocket 错误
-                    _LOGGER.error("WebSocket 错误: %s", self._ws.exception())
+                    # WebSocket 错误 | WebSocket error
+                    _LOGGER.error("WebSocket error: %s", self._ws.exception())
                     break
 
                 elif msg.type == aiohttp.WSMsgType.CLOSED:
-                    # 连接被关闭
-                    _LOGGER.info("WebSocket 连接已关闭")
+                    # 连接被关闭 | Connection closed
+                    _LOGGER.info("WebSocket connection closed")
                     break
 
         except asyncio.CancelledError:
-            # 任务被取消（正常关闭）
+            # 任务被取消（正常关闭）| Task cancelled (normal shutdown)
             raise
         except Exception as err:
-            _LOGGER.error("接收消息时出错: %s", err)
+            _LOGGER.error("Error receiving messages: %s", err)
 
         finally:
             # 连接断开，触发重连
@@ -335,7 +342,8 @@ class SeeedHADevice:
             data: 解析后的 JSON 数据
         """
         msg_type = data.get("type")
-        _LOGGER.debug("收到消息: type=%s, data=%s", msg_type, data)
+        # 收到消息 | Received message
+        _LOGGER.debug("Received message: type=%s, data=%s", msg_type, data)
 
         if msg_type == MSG_TYPE_PING:
             # 心跳请求，发送响应
@@ -359,34 +367,37 @@ class SeeedHADevice:
                 self._entities[entity_id]["state"] = state
                 self._entities[entity_id]["attributes"] = attributes
 
-                _LOGGER.info("实体状态更新: %s = %s", entity_id, state)
+                # 实体状态更新 | Entity state updated
+                _LOGGER.info("Entity state updated: %s = %s", entity_id, state)
 
-            # 通知所有状态回调
+            # 通知所有状态回调 | Notify all state callbacks
             for callback in self._state_callbacks:
                 try:
                     callback(data)
                 except Exception as err:
-                    _LOGGER.error("状态回调出错: %s", err)
+                    _LOGGER.error("State callback error: %s", err)
 
         elif msg_type == MSG_TYPE_DISCOVERY:
             # 实体发现消息
             # 格式: {type: "discovery", entities: [{id, name, type, unit, ...}, ...]}
+            # Format: {type: "discovery", entities: [{id, name, type, unit, ...}, ...]}
             entities = data.get("entities", [])
 
-            _LOGGER.info("收到实体发现: %d 个实体", len(entities))
+            # 收到实体发现 | Received entity discovery
+            _LOGGER.info("Received entity discovery: %d entities", len(entities))
 
             for entity in entities:
                 entity_id = entity.get("id")
                 if entity_id:
                     self._entities[entity_id] = entity
-                    _LOGGER.debug("发现实体: %s", entity)
+                    _LOGGER.debug("Discovered entity: %s", entity)
 
-            # 通知所有发现回调
+            # 通知所有发现回调 | Notify all discovery callbacks
             for callback in self._discovery_callbacks:
                 try:
                     callback(data)
                 except Exception as err:
-                    _LOGGER.error("发现回调出错: %s", err)
+                    _LOGGER.error("Discovery callback error: %s", err)
 
     async def _async_reconnect(self) -> None:
         """
@@ -394,14 +405,18 @@ class SeeedHADevice:
         Reconnect to the device.
 
         在连接断开后持续尝试重连，直到成功。
+        Continuously try to reconnect until successful.
         重连间隔由 RECONNECT_INTERVAL 定义。
+        Reconnect interval is defined by RECONNECT_INTERVAL.
         """
         while not self._connected:
-            _LOGGER.info("尝试重连: %s", self.host)
+            # 尝试重连 | Trying to reconnect
+            _LOGGER.info("Trying to reconnect: %s", self.host)
             await asyncio.sleep(RECONNECT_INTERVAL)
 
             if await self.async_connect():
-                _LOGGER.info("重连成功: %s", self.host)
+                # 重连成功 | Reconnected successfully
+                _LOGGER.info("Reconnected successfully: %s", self.host)
                 break
 
         self._reconnect_task = None
@@ -418,15 +433,17 @@ class SeeedHADevice:
             bool: 发送是否成功
         """
         if not self._ws or self._ws.closed:
-            _LOGGER.warning("无法发送: WebSocket 未连接")
+            # 无法发送: WebSocket 未连接 | Cannot send: WebSocket not connected
+            _LOGGER.warning("Cannot send: WebSocket not connected")
             return False
 
         try:
             await self._ws.send_json(data)
-            _LOGGER.debug("发送数据: %s", data)
+            _LOGGER.debug("Sent data: %s", data)
             return True
         except Exception as err:
-            _LOGGER.error("发送数据失败: %s", err)
+            # 发送数据失败 | Failed to send data
+            _LOGGER.error("Failed to send data: %s", err)
             return False
 
     async def async_request_discovery(self) -> bool:
@@ -439,7 +456,8 @@ class SeeedHADevice:
         返回 | Returns:
             bool: 请求是否发送成功
         """
-        _LOGGER.info("请求实体发现")
+        # 请求实体发现 | Request entity discovery
+        _LOGGER.info("Requesting entity discovery")
         return await self._async_send({
             "type": MSG_TYPE_DISCOVERY,
             "action": "request",
@@ -477,12 +495,15 @@ class SeeedHADevice:
 
         if command is not None:
             data["command"] = command
-            _LOGGER.info("发送命令: %s -> %s", entity_id, command)
+            # 发送命令 | Sending command
+            _LOGGER.info("Sending command: %s -> %s", entity_id, command)
         elif state is not None:
             data["state"] = state
-            _LOGGER.info("发送状态: %s -> %s", entity_id, state)
+            # 发送状态 | Sending state
+            _LOGGER.info("Sending state: %s -> %s", entity_id, state)
         else:
-            _LOGGER.error("发送命令失败: 必须提供 command 或 state")
+            # 必须提供 command 或 state | Must provide command or state
+            _LOGGER.error("Failed to send command: must provide command or state")
             return False
 
         return await self._async_send(data)

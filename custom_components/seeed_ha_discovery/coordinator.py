@@ -90,7 +90,8 @@ class SeeedHACoordinator(DataUpdateCoordinator[dict[str, Any]]):
         3. 等待发现完成
         4. 更新初始数据
         """
-        _LOGGER.info("协调器开始连接")
+        # 协调器开始连接 | Coordinator starting connection
+        _LOGGER.info("Coordinator starting connection")
 
         # 步骤 1: 注册回调
         # 当设备推送状态更新时，会调用 _handle_state_update
@@ -102,16 +103,16 @@ class SeeedHACoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._handle_discovery
         )
 
-        # 步骤 2: 连接到设备
+        # 步骤 2: 连接到设备 | Step 2: Connect to device
         if not await self.device.async_connect():
-            raise ConnectionError("无法连接到 Seeed HA 设备")
+            raise ConnectionError("Cannot connect to Seeed HA device")
 
-        # 步骤 3: 等待发现完成（最多等待 10 秒）
+        # 步骤 3: 等待发现完成（最多等待 10 秒）| Step 3: Wait for discovery (max 10 seconds)
         try:
             await asyncio.wait_for(self._discovery_complete.wait(), timeout=10)
-            _LOGGER.info("设备发现完成，共 %d 个实体", len(self.device.entities))
+            _LOGGER.info("Device discovery complete, %d entities found", len(self.device.entities))
         except asyncio.TimeoutError:
-            _LOGGER.warning("等待设备发现超时，继续使用已有实体")
+            _LOGGER.warning("Device discovery timeout, continuing with existing entities")
 
         # 步骤 4: 设置初始数据
         self.async_set_updated_data({"entities": self.device.entities})
@@ -123,7 +124,8 @@ class SeeedHACoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         移除所有回调并断开设备连接。
         """
-        _LOGGER.info("协调器断开连接")
+        # 协调器断开连接 | Coordinator disconnecting
+        _LOGGER.info("Coordinator disconnecting")
 
         # 移除状态回调
         if self._remove_state_callback:
@@ -157,7 +159,8 @@ class SeeedHACoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entity_id = data.get("entity_id")
         state = data.get("state")
 
-        _LOGGER.debug("收到状态更新: %s = %s", entity_id, state)
+        # 收到状态更新 | Received state update
+        _LOGGER.debug("Received state update: %s = %s", entity_id, state)
 
         # 更新协调器数据，触发实体刷新
         self.async_set_updated_data({"entities": self.device.entities})
@@ -176,10 +179,11 @@ class SeeedHACoordinator(DataUpdateCoordinator[dict[str, Any]]):
                   格式: {type: "discovery", entities: [{id, name, type, ...}, ...]}
         """
         entities = data.get("entities", [])
-        _LOGGER.info("收到设备发现: %d 个实体", len(entities))
+        # 收到设备发现 | Received device discovery
+        _LOGGER.info("Received device discovery: %d entities", len(entities))
 
         for entity in entities:
-            _LOGGER.debug("实体: %s", entity)
+            _LOGGER.debug("Entity: %s", entity)
 
         # 标记发现完成
         self._discovery_complete.set()

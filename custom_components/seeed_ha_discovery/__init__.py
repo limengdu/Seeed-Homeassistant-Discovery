@@ -85,7 +85,7 @@ async def _async_setup_wifi_entry(hass: HomeAssistant, entry: ConfigEntry) -> bo
     host = entry.data[CONF_HOST]
     port = entry.data.get(CONF_PORT, DEFAULT_WS_PORT)
 
-    _LOGGER.info("正在设置 Seeed HA WiFi 设备: %s:%s", host, port)
+    # 正在设置 WiFi 设备 | Setting up WiFi device
     _LOGGER.info("Setting up Seeed HA WiFi device: %s:%s", host, port)
 
     # 创建设备实例 - 负责与 ESP32 通信
@@ -97,12 +97,12 @@ async def _async_setup_wifi_entry(hass: HomeAssistant, entry: ConfigEntry) -> bo
     # 尝试连接到设备
     try:
         await coordinator.async_connect()
-        _LOGGER.info("成功连接到 WiFi 设备 %s", host)
+        # 连接成功 | Connection successful
         _LOGGER.info("Successfully connected to WiFi device %s", host)
     except Exception as err:
-        _LOGGER.error("无法连接到 Seeed HA WiFi 设备 %s: %s", host, err)
+        # 连接失败 | Connection failed
         _LOGGER.error("Failed to connect to Seeed HA WiFi device at %s: %s", host, err)
-        raise ConfigEntryNotReady(f"无法连接到 {host}") from err
+        raise ConfigEntryNotReady(f"Cannot connect to {host}") from err
 
     # 保存设备和协调器引用
     hass.data[DOMAIN][entry.entry_id] = {
@@ -134,7 +134,7 @@ async def _async_setup_ble_entry(hass: HomeAssistant, entry: ConfigEntry) -> boo
     ble_address = entry.data[CONF_BLE_ADDRESS]
     ble_control = entry.data.get(CONF_BLE_CONTROL, False)
 
-    _LOGGER.info("正在设置 Seeed HA BLE 设备: %s (控制=%s)", ble_address, ble_control)
+    # 正在设置 BLE 设备 | Setting up BLE device
     _LOGGER.info("Setting up Seeed HA BLE device: %s (control=%s)", ble_address, ble_control)
 
     # 保存配置
@@ -154,7 +154,8 @@ async def _async_setup_ble_entry(hass: HomeAssistant, entry: ConfigEntry) -> boo
     # 注册配置更新监听器
     entry.async_on_unload(entry.add_update_listener(async_update_options))
 
-    _LOGGER.info("BLE 设备设置完成: %s", ble_address)
+    # BLE 设备设置完成 | BLE device setup complete
+    _LOGGER.info("BLE device setup complete: %s", ble_address)
     return True
 
 
@@ -175,7 +176,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """
     from .const import CONF_BLE_CONTROL
 
-    _LOGGER.info("正在卸载 Seeed HA 设备")
+    # 正在卸载设备 | Unloading device
     _LOGGER.info("Unloading Seeed HA device")
 
     # 获取连接类型
@@ -208,7 +209,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             manager = data["ble_manager"]
             await manager.async_disconnect()
 
-        _LOGGER.info("设备卸载完成")
+        # 卸载完成 | Unload complete
         _LOGGER.info("Device unloaded successfully")
 
     return unload_ok
@@ -222,6 +223,6 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
     当用户修改设备配置时调用，会重新加载集成。
     Called when user modifies device config, will reload the integration.
     """
-    _LOGGER.info("配置已更新，正在重新加载")
+    # 配置已更新 | Config updated
     _LOGGER.info("Config updated, reloading")
     await hass.config_entries.async_reload(entry.entry_id)

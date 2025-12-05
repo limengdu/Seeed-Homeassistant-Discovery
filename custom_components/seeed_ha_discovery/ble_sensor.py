@@ -62,7 +62,8 @@ async def async_setup_ble_sensors(
     device_name = entry.title
     model = entry.data.get(CONF_MODEL, "XIAO BLE")
 
-    _LOGGER.info("设置 BLE 传感器: %s (%s)", device_name, ble_address)
+    # 设置 BLE 传感器 | Setting up BLE sensors
+    _LOGGER.info("Setting up BLE sensors: %s (%s)", device_name, ble_address)
 
     # 存储已创建的传感器
     created_sensors: dict[str, SeeedBLESensor] = {}
@@ -76,12 +77,13 @@ async def async_setup_ble_sensors(
         处理蓝牙事件
         Handle bluetooth event.
         """
-        # 只处理我们的设备
+        # 只处理我们的设备 | Only process our device
         if service_info.address.upper() != ble_address.upper():
             return
 
+        # 收到 BLE 广播 | Received BLE advertisement
         _LOGGER.debug(
-            "收到 BLE 广播: %s (%s), RSSI: %d",
+            "Received BLE advertisement: %s (%s), RSSI: %d",
             service_info.name,
             service_info.address,
             service_info.rssi,
@@ -113,8 +115,9 @@ async def async_setup_ble_sensors(
                 )
                 created_sensors[sensor_key] = sensor
                 new_entities.append(sensor)
+                # 创建 BLE 传感器 | Creating BLE sensor
                 _LOGGER.info(
-                    "创建 BLE 传感器: %s = %s %s",
+                    "Creating BLE sensor: %s = %s %s",
                     sensor_data.name,
                     sensor_data.value,
                     sensor_data.unit or "",
@@ -124,11 +127,12 @@ async def async_setup_ble_sensors(
         if new_entities:
             async_add_entities(new_entities)
 
-        # 处理按钮事件
+        # 处理按钮事件 | Handle button events
         if device.events:
             for event_data in device.events:
+                # 收到 BLE 事件 | Received BLE event
                 _LOGGER.info(
-                    "收到 BLE 事件: %s - %s",
+                    "Received BLE event: %s - %s",
                     event_data.get("type"),
                     event_data.get("event"),
                 )
@@ -145,8 +149,8 @@ async def async_setup_ble_sensors(
                     },
                 )
 
-    # 注册蓝牙回调
-    # 使用 Service Data UUID 匹配
+    # 注册蓝牙回调 | Register Bluetooth callback
+    # 使用 Service Data UUID 匹配 | Match using Service Data UUID
     entry.async_on_unload(
         async_register_callback(
             hass,
@@ -159,7 +163,8 @@ async def async_setup_ble_sensors(
         )
     )
 
-    _LOGGER.info("BLE 传感器设置完成，等待广播数据...")
+    # BLE 传感器设置完成 | BLE sensor setup complete
+    _LOGGER.info("BLE sensor setup complete, waiting for advertisement data...")
 
 
 class SeeedBLESensor(SensorEntity):
@@ -198,12 +203,12 @@ class SeeedBLESensor(SensorEntity):
         if sensor_data.unit:
             self._attr_native_unit_of_measurement = sensor_data.unit
 
-        # 设置设备类别
+        # 设置设备类别 | Set device class
         if sensor_data.device_class:
             try:
                 self._attr_device_class = SensorDeviceClass(sensor_data.device_class)
             except ValueError:
-                _LOGGER.warning("未知的设备类别: %s", sensor_data.device_class)
+                _LOGGER.warning("Unknown device class: %s", sensor_data.device_class)
 
         # 设置状态类别
         if sensor_data.device_class:
@@ -211,7 +216,10 @@ class SeeedBLESensor(SensorEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        """返回设备信息"""
+        """
+        返回设备信息
+        Return device info.
+        """
         return DeviceInfo(
             identifiers={(DOMAIN, self._device_id)},
             name=self._device_name,
@@ -227,4 +235,5 @@ class SeeedBLESensor(SensorEntity):
         """
         self._attr_native_value = value
         self.async_write_ha_state()
-        _LOGGER.debug("更新 BLE 传感器 %s: %s", self._attr_name, value)
+        # 更新 BLE 传感器 | Update BLE sensor
+        _LOGGER.debug("Updated BLE sensor %s: %s", self._attr_name, value)
