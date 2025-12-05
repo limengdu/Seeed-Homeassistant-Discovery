@@ -1,12 +1,13 @@
 /**
  * ============================================================================
+ * Seeed Home Assistant Discovery BLE - Implementation File
  * Seeed Home Assistant Discovery BLE - 实现文件
- * Seeed Home Assistant Discovery BLE - Implementation
  * ============================================================================
  *
- * 支持平台 | Supported Platforms:
- * - ESP32 系列 (NimBLE)
- * - XIAO nRF52840 mbed 版本 (ArduinoBLE)
+ * Supported Platforms | 支持平台:
+ * - ESP32 series (NimBLE) | ESP32 系列 (NimBLE)
+ * - XIAO nRF52840 mbed version (ArduinoBLE)
+ *   XIAO nRF52840 mbed 版本 (ArduinoBLE)
  * - XIAO nRF52840 Adafruit BSP (Bluefruit)
  *
  * @author limengdu
@@ -16,13 +17,14 @@
 #include <stdarg.h>
 
 // =============================================================================
+// Global Callback Pointer (for platform callbacks)
 // 全局回调指针（用于平台回调）
 // =============================================================================
 
 static SeeedHADiscoveryBLE* g_pInstance = nullptr;
 
 // =============================================================================
-// ESP32 NimBLE 回调类
+// ESP32 NimBLE Callback Classes | ESP32 NimBLE 回调类
 // =============================================================================
 
 #ifdef SEEED_BLE_ESP32
@@ -38,7 +40,7 @@ class SeeedBLEServerCallbacks : public NimBLEServerCallbacks {
         if (g_pInstance) {
             g_pInstance->_onDisconnect();
         }
-        // 重新开始广播
+        // Restart advertising | 重新开始广播
         NimBLEDevice::startAdvertising();
     }
 };
@@ -58,7 +60,7 @@ static SeeedBLECharCallbacks charCallbacks;
 #endif
 
 // =============================================================================
-// SeeedBLESensor 实现
+// SeeedBLESensor Implementation | SeeedBLESensor 实现
 // =============================================================================
 
 SeeedBLESensor::SeeedBLESensor(BTHomeObjectId objectId)
@@ -169,7 +171,7 @@ void SeeedBLESensor::writeToBuffer(uint8_t* buffer, uint8_t& offset) const {
 }
 
 // =============================================================================
-// SeeedBLESwitch 实现
+// SeeedBLESwitch Implementation | SeeedBLESwitch 实现
 // =============================================================================
 
 SeeedBLESwitch::SeeedBLESwitch(const char* id, const char* name)
@@ -207,7 +209,7 @@ void SeeedBLESwitch::_handleCommand(bool state) {
 }
 
 // =============================================================================
-// SeeedHADiscoveryBLE 实现
+// SeeedHADiscoveryBLE Implementation | SeeedHADiscoveryBLE 实现
 // =============================================================================
 
 SeeedHADiscoveryBLE::SeeedHADiscoveryBLE()
@@ -273,7 +275,7 @@ bool SeeedHADiscoveryBLE::begin(const char* deviceName, bool enableControl) {
     _controlEnabled = enableControl;
 
     _log("====================================");
-    _log("Seeed HA Discovery BLE v1.1.0");
+    _log("Seeed HA Discovery BLE v1.5.0");
     _log("====================================");
 
 // =============================================================================
@@ -286,21 +288,21 @@ bool SeeedHADiscoveryBLE::begin(const char* deviceName, bool enableControl) {
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
     if (_controlEnabled) {
-        // 创建 GATT 服务器
+        // Create GATT server | 创建 GATT 服务器
         _pServer = NimBLEDevice::createServer();
         _pServer->setCallbacks(&serverCallbacks);
 
-        // 创建控制服务
+        // Create control service | 创建控制服务
         _pControlService = _pServer->createService(SEEED_CONTROL_SERVICE_UUID);
 
-        // 命令特征值（可写）
+        // Command characteristic (writable) | 命令特征值（可写）
         _pCommandChar = _pControlService->createCharacteristic(
             SEEED_CONTROL_COMMAND_CHAR_UUID,
             NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
         );
         _pCommandChar->setCallbacks(&charCallbacks);
 
-        // 状态特征值（可读 + 通知）
+        // State characteristic (readable + notify) | 状态特征值（可读 + 通知）
         _pStateChar = _pControlService->createCharacteristic(
             SEEED_CONTROL_STATE_CHAR_UUID,
             NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
@@ -313,7 +315,7 @@ bool SeeedHADiscoveryBLE::begin(const char* deviceName, bool enableControl) {
     _pAdvertising = NimBLEDevice::getAdvertising();
 
     if (_controlEnabled) {
-        // 可连接广播
+        // Connectable advertising | 可连接广播
         _pAdvertising->addServiceUUID(SEEED_CONTROL_SERVICE_UUID);
     }
 
@@ -336,17 +338,17 @@ bool SeeedHADiscoveryBLE::begin(const char* deviceName, bool enableControl) {
     BLE.setDeviceName(_deviceName);
 
     if (_controlEnabled) {
-        // 创建控制服务
+        // Create control service | 创建控制服务
         _pControlService = new BLEService(SEEED_CONTROL_SERVICE_UUID);
 
-        // 命令特征值（可写）
+        // Command characteristic (writable) | 命令特征值（可写）
         _pCommandChar = new BLECharacteristic(
             SEEED_CONTROL_COMMAND_CHAR_UUID,
             BLEWrite | BLEWriteWithoutResponse,
             64
         );
 
-        // 状态特征值（可读 + 通知）
+        // State characteristic (readable + notify) | 状态特征值（可读 + 通知）
         _pStateChar = new BLECharacteristic(
             SEEED_CONTROL_STATE_CHAR_UUID,
             BLERead | BLENotify,
@@ -413,14 +415,14 @@ void SeeedHADiscoveryBLE::loop() {
     if (_controlEnabled) {
         BLE.poll();
 
-        // 检查连接状态
+        // Check connection status | 检查连接状态
         BLEDevice central = BLE.central();
         if (central) {
             if (!_connected) {
                 _onConnect();
             }
 
-            // 检查命令特征值
+            // Check command characteristic | 检查命令特征值
             if (_pCommandChar && _pCommandChar->written()) {
                 uint8_t buffer[64];
                 int len = _pCommandChar->readValue(buffer, sizeof(buffer));
@@ -435,6 +437,7 @@ void SeeedHADiscoveryBLE::loop() {
         }
     }
 #endif
+    // ESP32 callbacks are auto-triggered, no polling needed in loop
     // ESP32 的回调是自动触发的，不需要在 loop 中轮询
 }
 
@@ -533,8 +536,11 @@ void SeeedHADiscoveryBLE::updateAdvertiseData() {
         scanResponse.setName(_deviceName);
         _pAdvertising->setScanResponseData(scanResponse);
 
+        // Re-add control service UUID if control enabled
         // 重新添加控制服务 UUID（如果启用了控制）
         if (_controlEnabled) {
+            // Note: addServiceUUID is cumulative, not cleared by setAdvertisementData
+            // But for safety, we re-add each time
             // 注意：addServiceUUID 是累积的，不会被 setAdvertisementData 清除
             // 但为了确保，我们每次都重新添加
             _pAdvertising->clearServiceUUIDs();
@@ -551,6 +557,7 @@ void SeeedHADiscoveryBLE::updateAdvertiseData() {
     advData.setAdvertisedServiceData(0xFCD2, &_advData[7], btHomeDataLen);
     advData.setLocalName(_deviceName);
 
+    // If control enabled, re-set control service advertising
     // 如果启用了控制，重新设置控制服务广播
     if (_controlEnabled && _pControlService) {
         BLE.setAdvertisedService(*_pControlService);
@@ -615,6 +622,8 @@ void SeeedHADiscoveryBLE::advertise() {
 void SeeedHADiscoveryBLE::_handleCommand(const uint8_t* data, size_t length) {
     if (length < 2) return;
 
+    // Command format: [switch_index][state]
+    // Or: [0xFF][switch_index][state] to control specific switch
     // 命令格式: [switch_index][state]
     // 或者: [0xFF][switch_index][state] 表示控制指定开关
     
@@ -665,6 +674,7 @@ void SeeedHADiscoveryBLE::_notifyStateChange() {
 }
 
 void SeeedHADiscoveryBLE::_buildStateData(uint8_t* buffer, size_t* length) {
+    // State data format: [switch_count][sw0_state][sw1_state]...
     // 状态数据格式: [switch_count][sw0_state][sw1_state]...
     size_t offset = 0;
     buffer[offset++] = _switches.size();

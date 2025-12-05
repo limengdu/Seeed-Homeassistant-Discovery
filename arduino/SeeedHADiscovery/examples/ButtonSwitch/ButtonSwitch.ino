@@ -1,84 +1,109 @@
 /**
  * ============================================================================
+ * Seeed HA Discovery - Button Switch Example
  * Seeed HA Discovery - 按钮开关示例
- * Button Switch Example
  * ============================================================================
  *
- * 这个示例展示如何：
- * 1. 检测物理按钮的三种按法（单击、双击、长按）
- * 2. 每种按法对应一个独立的开关状态
- * 3. 物理按钮和 Home Assistant 都可以控制开关状态
- * 4. 实时同步状态到 Home Assistant
+ * This example demonstrates how to:
+ * 本示例展示如何：
+ * 1. Detect three types of button presses (single, double, long press)
+ *    检测物理按钮的三种按法（单击、双击、长按）
+ * 2. Each press type corresponds to an independent switch state
+ *    每种按法对应一个独立的开关状态
+ * 3. Both physical button and Home Assistant can control switch states
+ *    物理按钮和 Home Assistant 都可以控制开关状态
+ * 4. Real-time state synchronization to Home Assistant
+ *    实时同步状态到 Home Assistant
  *
+ * Hardware Requirements:
  * 硬件要求：
- * - XIAO ESP32-C3/C6/S3 或其他 ESP32 开发板
- * - 按钮（内置上拉电阻或外接上拉电阻）
+ * - XIAO ESP32-C3/C6/S3 or other ESP32 development boards
+ *   XIAO ESP32-C3/C6/S3 或其他 ESP32 开发板
+ * - Button (with internal or external pull-up resistor)
+ *   按钮（内置上拉电阻或外接上拉电阻）
  *
+ * Button Wiring:
  * 按钮接线方法：
- * - 按钮一端 → GPIO (默认 D1)
- * - 按钮另一端 → GND
- * - 内部上拉电阻已启用
+ * - Button terminal 1 → GPIO (default D1)
+ *   按钮一端 → GPIO (默认 D1)
+ * - Button terminal 2 → GND
+ *   按钮另一端 → GND
+ * - Internal pull-up resistor enabled
+ *   内部上拉电阻已启用
  *
+ * Software Dependencies:
  * 软件依赖：
- * - ArduinoJson (作者: Benoit Blanchon)
- * - WebSockets (作者: Markus Sattler)
+ * - ArduinoJson (by Benoit Blanchon)
+ * - WebSockets (by Markus Sattler)
  *
+ * Usage:
  * 使用方法：
- * 1. 修改下方的 WiFi 配置和按钮引脚
- * 2. 上传到 ESP32
- * 3. 打开串口监视器查看 IP 地址
- * 4. 在 Home Assistant 中添加设备
- * 5. 尝试按钮的不同按法，观察 HA 中开关状态变化
+ * 1. Modify WiFi configuration and button pin below
+ *    修改下方的 WiFi 配置和按钮引脚
+ * 2. Upload to ESP32
+ *    上传到 ESP32
+ * 3. Open Serial Monitor to view IP address
+ *    打开串口监视器查看 IP 地址
+ * 4. Add device in Home Assistant
+ *    在 Home Assistant 中添加设备
+ * 5. Try different button presses and observe switch state changes in HA
+ *    尝试按钮的不同按法，观察 HA 中开关状态变化
  *
+ * Button Operations:
  * 按键操作：
- * - 单击：切换"单击开关"状态
- * - 双击：切换"双击开关"状态
- * - 长按 (>1秒)：切换"长按开关"状态
+ * - Single click: Toggle "Single Click Switch" state
+ *   单击：切换"单击开关"状态
+ * - Double click: Toggle "Double Click Switch" state
+ *   双击：切换"双击开关"状态
+ * - Long press (>1s): Toggle "Long Press Switch" state
+ *   长按 (>1秒)：切换"长按开关"状态
  *
  * @author limengdu
- * @version 1.0.0
+ * @version 1.2.0
  */
 
 #include <SeeedHADiscovery.h>
 
 // =============================================================================
-// 配置区域 - 请根据你的环境修改
 // Configuration - Please modify according to your environment
+// 配置区域 - 请根据你的环境修改
 // =============================================================================
 
-// WiFi 配置
-const char* WIFI_SSID = "你的WiFi名称";      // Your WiFi SSID
-const char* WIFI_PASSWORD = "你的WiFi密码";  // Your WiFi password
+// WiFi Configuration | WiFi 配置
+const char* WIFI_SSID = "Your_WiFi_SSID";      // Your WiFi SSID | 你的WiFi名称
+const char* WIFI_PASSWORD = "Your_WiFi_Password";  // Your WiFi password | 你的WiFi密码
 
-// 按钮引脚
+// Button Pin | 按钮引脚
 #define BUTTON_PIN D1
 
-// 按钮检测参数
-#define LONG_PRESS_TIME 1000      // 长按阈值（毫秒）
-#define DOUBLE_CLICK_TIME 300     // 双击间隔（毫秒）
+// Button Detection Parameters | 按钮检测参数
+#define LONG_PRESS_TIME 1000      // Long press threshold (ms) | 长按阈值（毫秒）
+#define DOUBLE_CLICK_TIME 300     // Double click interval (ms) | 双击间隔（毫秒）
 
 // =============================================================================
-// 全局变量
+// Global Variables | 全局变量
 // =============================================================================
 
 SeeedHADiscovery ha;
 
+// Three switches for three press types
 // 三个开关，对应三种按法
 SeeedHASwitch* singleClickSwitch;
 SeeedHASwitch* doubleClickSwitch;
 SeeedHASwitch* longPressSwitch;
 
-// 按钮状态
+// Button state | 按钮状态
 bool lastButtonState = HIGH;
 unsigned long buttonPressTime = 0;
 unsigned long lastClickTime = 0;
 uint8_t clickCount = 0;
 
 // =============================================================================
-// 辅助函数
+// Helper Functions | 辅助函数
 // =============================================================================
 
 /**
+ * Detect button event
  * 检测按钮事件
  */
 enum ButtonEvent {
@@ -93,20 +118,21 @@ ButtonEvent detectButtonEvent() {
     ButtonEvent event = BUTTON_NONE;
     unsigned long now = millis();
 
-    // 检测按下
+    // Detect press | 检测按下
     if (lastButtonState == HIGH && currentState == LOW) {
         buttonPressTime = now;
     }
 
-    // 检测释放
+    // Detect release | 检测释放
     if (lastButtonState == LOW && currentState == HIGH) {
         unsigned long pressDuration = now - buttonPressTime;
 
         if (pressDuration >= LONG_PRESS_TIME) {
-            // 长按
+            // Long press | 长按
             event = BUTTON_LONG;
             clickCount = 0;
         } else {
+            // Short press, detect double click
             // 短按，检测双击
             if (now - lastClickTime < DOUBLE_CLICK_TIME) {
                 clickCount++;
@@ -117,7 +143,7 @@ ButtonEvent detectButtonEvent() {
         }
     }
 
-    // 检测双击超时
+    // Detect double click timeout | 检测双击超时
     if (clickCount > 0 && now - lastClickTime > DOUBLE_CLICK_TIME) {
         if (clickCount == 1) {
             event = BUTTON_SINGLE;
@@ -132,113 +158,124 @@ ButtonEvent detectButtonEvent() {
 }
 
 // =============================================================================
-// Arduino 主程序
+// Arduino Main Program | Arduino 主程序
 // =============================================================================
 
 void setup() {
-    // 初始化串口
+    // Initialize serial | 初始化串口
     Serial.begin(115200);
     delay(1000);
 
     Serial.println();
     Serial.println("========================================");
-    Serial.println("  Seeed HA Discovery - 按钮开关示例");
+    Serial.println("  Seeed HA Discovery - Button Switch");
     Serial.println("========================================");
     Serial.println();
 
-    // 初始化按钮引脚
+    // Initialize button pin | 初始化按钮引脚
     pinMode(BUTTON_PIN, INPUT_PULLUP);
-    Serial.printf("按钮引脚: D1 (GPIO%d)\n", BUTTON_PIN);
+    Serial.print("Button Pin: D1 (GPIO");
+    Serial.print(BUTTON_PIN);
+    Serial.println(")");
 
-    // 配置设备信息
+    // Configure device info | 配置设备信息
     ha.setDeviceInfo(
-        "按钮控制器",        // 设备名称
-        "XIAO ESP32",        // 设备型号
-        "1.0.0"              // 固件版本
+        "Button Controller",     // Device name | 设备名称
+        "XIAO ESP32",           // Device model | 设备型号
+        "1.0.0"                 // Firmware version | 固件版本
     );
 
     ha.enableDebug(true);
 
-    // 连接 WiFi
-    Serial.println("正在连接 WiFi...");
+    // Connect WiFi | 连接 WiFi
+    Serial.println("Connecting to WiFi...");
 
     if (!ha.begin(WIFI_SSID, WIFI_PASSWORD)) {
-        Serial.println("❌ WiFi 连接失败！");
+        Serial.println("WiFi connection failed!");
         while (1) {
             delay(1000);
         }
     }
 
-    Serial.println("✅ WiFi 连接成功！");
-    Serial.printf("IP 地址: %s\n", ha.getLocalIP().toString().c_str());
+    Serial.println("WiFi connected!");
+    Serial.print("IP Address: ");
+    Serial.println(ha.getLocalIP().toString().c_str());
 
     // =========================================================================
+    // Create three switches for three press types
     // 创建三个开关，对应三种按法
     // =========================================================================
 
-    singleClickSwitch = ha.addSwitch("single", "单击开关", "mdi:gesture-tap");
-    doubleClickSwitch = ha.addSwitch("double", "双击开关", "mdi:gesture-double-tap");
-    longPressSwitch = ha.addSwitch("long", "长按开关", "mdi:gesture-tap-hold");
+    singleClickSwitch = ha.addSwitch("single", "Single Click", "mdi:gesture-tap");
+    doubleClickSwitch = ha.addSwitch("double", "Double Click", "mdi:gesture-double-tap");
+    longPressSwitch = ha.addSwitch("long", "Long Press", "mdi:gesture-tap-hold");
 
+    // Register callbacks - executed when HA sends commands
     // 注册回调 - 当 HA 发送命令时执行
     singleClickSwitch->onStateChange([](bool state) {
-        Serial.printf("HA 控制 [单击]: %s\n", state ? "开" : "关");
+        Serial.print("HA Control [Single Click]: ");
+        Serial.println(state ? "ON" : "OFF");
     });
 
     doubleClickSwitch->onStateChange([](bool state) {
-        Serial.printf("HA 控制 [双击]: %s\n", state ? "开" : "关");
+        Serial.print("HA Control [Double Click]: ");
+        Serial.println(state ? "ON" : "OFF");
     });
 
     longPressSwitch->onStateChange([](bool state) {
-        Serial.printf("HA 控制 [长按]: %s\n", state ? "开" : "关");
+        Serial.print("HA Control [Long Press]: ");
+        Serial.println(state ? "ON" : "OFF");
     });
 
     // =========================================================================
-    // 完成初始化
+    // Initialization complete | 完成初始化
     // =========================================================================
 
     Serial.println();
     Serial.println("========================================");
-    Serial.println("  初始化完成！");
+    Serial.println("  Initialization Complete!");
     Serial.println("========================================");
     Serial.println();
-    Serial.println("在 Home Assistant 中添加设备:");
-    Serial.println("  设置 → 设备与服务 → 添加集成");
-    Serial.println("  搜索 'Seeed HA Discovery'");
-    Serial.printf("  输入 IP: %s\n", ha.getLocalIP().toString().c_str());
+    Serial.println("Add device in Home Assistant:");
+    Serial.println("  Settings -> Devices & Services -> Add Integration");
+    Serial.println("  Search 'Seeed HA Discovery'");
+    Serial.print("  Enter IP: ");
+    Serial.println(ha.getLocalIP().toString().c_str());
     Serial.println();
-    Serial.println("支持的按钮操作:");
-    Serial.println("  - 单击：切换'单击开关'");
-    Serial.println("  - 双击：切换'双击开关'");
-    Serial.println("  - 长按 (>1秒)：切换'长按开关'");
+    Serial.println("Supported button operations:");
+    Serial.println("  - Single click: Toggle 'Single Click' switch");
+    Serial.println("  - Double click: Toggle 'Double Click' switch");
+    Serial.println("  - Long press (>1s): Toggle 'Long Press' switch");
     Serial.println();
-    Serial.println("等待按钮事件...");
+    Serial.println("Waiting for button events...");
     Serial.println();
 }
 
 void loop() {
+    // Must call! Handle network events
     // 必须调用！处理网络事件
     ha.handle();
 
-    // 检测按钮事件
+    // Detect button event | 检测按钮事件
     ButtonEvent event = detectButtonEvent();
 
+    // If event detected, toggle corresponding switch state
     // 如果有事件，切换对应开关的状态
     if (event != BUTTON_NONE) {
-        const char* eventName = "未知";
+        const char* eventName = "Unknown";
         SeeedHASwitch* targetSwitch = nullptr;
 
         switch (event) {
             case BUTTON_SINGLE:
-                eventName = "单击";
+                eventName = "Single Click";
                 targetSwitch = singleClickSwitch;
                 break;
             case BUTTON_DOUBLE:
-                eventName = "双击";
+                eventName = "Double Click";
                 targetSwitch = doubleClickSwitch;
                 break;
             case BUTTON_LONG:
-                eventName = "长按";
+                eventName = "Long Press";
                 targetSwitch = longPressSwitch;
                 break;
             default:
@@ -246,18 +283,21 @@ void loop() {
         }
 
         if (targetSwitch) {
-            // 切换状态
+            // Toggle state | 切换状态
             bool newState = !targetSwitch->getState();
 
-            Serial.printf("按钮事件: %s → 开关状态: %s\n", 
-                         eventName, newState ? "开" : "关");
+            Serial.print("Button Event: ");
+            Serial.print(eventName);
+            Serial.print(" -> Switch State: ");
+            Serial.println(newState ? "ON" : "OFF");
 
+            // Update switch state (sync to HA)
             // 更新开关状态（同步到 HA）
             targetSwitch->setState(newState);
         }
     }
 
-    // 连接状态监控
+    // Connection status monitoring | 连接状态监控
     static unsigned long lastCheck = 0;
     static bool wasConnected = false;
 
@@ -266,9 +306,8 @@ void loop() {
 
         bool connected = ha.isHAConnected();
         if (connected != wasConnected) {
-            Serial.println(connected ? "🟢 HA 已连接" : "🔴 HA 已断开");
+            Serial.println(connected ? "HA Connected" : "HA Disconnected");
             wasConnected = connected;
         }
     }
 }
-

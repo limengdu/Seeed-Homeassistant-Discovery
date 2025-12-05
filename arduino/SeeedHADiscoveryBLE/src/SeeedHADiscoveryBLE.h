@@ -1,23 +1,33 @@
 /**
  * ============================================================================
- * Seeed Home Assistant Discovery BLE - 蓝牙版 Arduino 库
  * Seeed Home Assistant Discovery BLE - Bluetooth Arduino Library
+ * Seeed Home Assistant Discovery BLE - 蓝牙版 Arduino 库
  * ============================================================================
  *
+ * This library enables ESP32 and nRF52840 devices to connect to Home Assistant via Bluetooth:
  * 这个库让 ESP32 和 nRF52840 设备能够通过蓝牙连接到 Home Assistant：
- * - 支持 XIAO nRF52840、XIAO ESP32-C3/C6/S3
- * - 基于 BTHome v2 协议，HA 原生支持
- * - 支持传感器数据上报（被动广播）
- * - 支持开关控制（GATT 双向通信）
+ * - Supports XIAO nRF52840, XIAO ESP32-C3/C6/S3
+ *   支持 XIAO nRF52840、XIAO ESP32-C3/C6/S3
+ * - Based on BTHome v2 protocol, native HA support
+ *   基于 BTHome v2 协议，HA 原生支持
+ * - Supports sensor data reporting (passive broadcast)
+ *   支持传感器数据上报（被动广播）
+ * - Supports switch control (GATT bidirectional communication)
+ *   支持开关控制（GATT 双向通信）
  *
+ * Usage:
  * 使用方法：
- * 1. 创建 SeeedHADiscoveryBLE 实例
- * 2. 调用 begin() 初始化 BLE
- * 3. 使用 addSensor() 添加传感器 / addSwitch() 添加开关
- * 4. 定期调用 loop() 处理事件
+ * 1. Create SeeedHADiscoveryBLE instance
+ *    创建 SeeedHADiscoveryBLE 实例
+ * 2. Call begin() to initialize BLE
+ *    调用 begin() 初始化 BLE
+ * 3. Use addSensor() to add sensors / addSwitch() to add switches
+ *    使用 addSensor() 添加传感器 / addSwitch() 添加开关
+ * 4. Call loop() periodically to handle events
+ *    定期调用 loop() 处理事件
  *
  * @author limengdu
- * @version 1.1.0
+ * @version 1.5.0
  * @license MIT
  */
 
@@ -28,8 +38,7 @@
 #include <functional>
 
 // =============================================================================
-// 平台检测
-// Platform Detection
+// Platform Detection | 平台检测
 // =============================================================================
 
 #if defined(ESP32)
@@ -54,10 +63,10 @@
 #include <vector>
 
 // =============================================================================
-// 版本和常量
+// Version and Constants | 版本和常量
 // =============================================================================
 
-#define SEEED_BLE_VERSION "1.1.0"
+#define SEEED_BLE_VERSION "1.5.0"
 
 // Seeed Manufacturer ID (0x5EED = "SEED")
 #define SEEED_MANUFACTURER_ID 0x5EED
@@ -66,18 +75,21 @@
 #define BTHOME_SERVICE_UUID 0xFCD2
 #define BTHOME_SERVICE_UUID_STR "0000fcd2-0000-1000-8000-00805f9b34fb"
 
-// Seeed HA Control Service UUID (自定义)
+// Seeed HA Control Service UUID (custom)
+// Used for bidirectional control communication
+// Seeed HA 控制服务 UUID（自定义）
 // 用于双向通信控制
 #define SEEED_CONTROL_SERVICE_UUID        "5eed0001-b5a3-f393-e0a9-e50e24dcca9e"
 #define SEEED_CONTROL_COMMAND_CHAR_UUID   "5eed0002-b5a3-f393-e0a9-e50e24dcca9e"
 #define SEEED_CONTROL_STATE_CHAR_UUID     "5eed0003-b5a3-f393-e0a9-e50e24dcca9e"
 
-// BTHome 设备信息标志
+// BTHome Device Info Flags | BTHome 设备信息标志
 #define BTHOME_DEVICE_INFO_ENCRYPT  0x01
 #define BTHOME_DEVICE_INFO_TRIGGER  0x04
 #define BTHOME_DEVICE_INFO_VERSION  0x40
 
 // =============================================================================
+// BTHome Sensor Type Definitions (BTHome v2 Spec)
 // BTHome 传感器类型定义 (BTHome v2 规范)
 // =============================================================================
 
@@ -131,7 +143,7 @@ enum BTHomeObjectId : uint8_t {
     BTHOME_BUTTON           = 0x3A,
 };
 
-// 按钮事件类型
+// Button Event Types | 按钮事件类型
 enum BTHomeButtonEvent : uint8_t {
     BTHOME_BUTTON_NONE       = 0x00,
     BTHOME_BUTTON_PRESS      = 0x01,
@@ -143,7 +155,7 @@ enum BTHomeButtonEvent : uint8_t {
 };
 
 // =============================================================================
-// 前向声明
+// Forward Declarations | 前向声明
 // =============================================================================
 
 class SeeedHADiscoveryBLE;
@@ -151,14 +163,14 @@ class SeeedBLESensor;
 class SeeedBLESwitch;
 
 // =============================================================================
-// 回调函数类型
+// Callback Types | 回调函数类型
 // =============================================================================
 
-// 开关状态变化回调
+// Switch state change callback | 开关状态变化回调
 typedef std::function<void(bool state)> BLESwitchCallback;
 
 // =============================================================================
-// SeeedBLESensor - BLE 传感器类
+// SeeedBLESensor - BLE Sensor Class | BLE 传感器类
 // =============================================================================
 
 class SeeedBLESensor {
@@ -185,58 +197,64 @@ private:
 };
 
 // =============================================================================
-// SeeedBLESwitch - BLE 开关类
+// SeeedBLESwitch - BLE Switch Class | BLE 开关类
 // =============================================================================
 
 /**
+ * BLE Switch Class - supports receiving control commands from Home Assistant
  * BLE 开关类 - 支持从 Home Assistant 接收控制命令
  * 
+ * Uses GATT characteristics for bidirectional communication:
  * 使用 GATT 特征值实现双向通信：
- * - HA 写入命令特征值来控制开关
- * - 设备通过状态特征值通知 HA 当前状态
+ * - HA writes to command characteristic to control switch
+ *   HA 写入命令特征值来控制开关
+ * - Device notifies HA of current state via state characteristic
+ *   设备通过状态特征值通知 HA 当前状态
  */
 class SeeedBLESwitch {
 public:
     /**
-     * 构造函数
-     * @param id 开关 ID（用于识别）
-     * @param name 开关名称（显示用）
+     * Constructor | 构造函数
+     * @param id Switch ID (for identification) | 开关 ID（用于识别）
+     * @param name Switch name (for display) | 开关名称（显示用）
      */
     SeeedBLESwitch(const char* id, const char* name);
 
     /**
-     * 设置开关状态
-     * @param state true = 开, false = 关
+     * Set switch state | 设置开关状态
+     * @param state true = ON, false = OFF
      */
     void setState(bool state);
 
     /**
-     * 切换开关状态
+     * Toggle switch state | 切换开关状态
      */
     void toggle();
 
     /**
-     * 获取当前状态
+     * Get current state | 获取当前状态
      */
     bool getState() const { return _state; }
 
     /**
-     * 获取开关 ID
+     * Get switch ID | 获取开关 ID
      */
     const char* getId() const { return _id; }
 
     /**
-     * 获取开关名称
+     * Get switch name | 获取开关名称
      */
     const char* getName() const { return _name; }
 
     /**
+     * Register state change callback
+     * Called when HA sends control command
      * 注册状态变化回调
      * 当 HA 发送控制命令时调用
      */
     void onStateChange(BLESwitchCallback callback) { _callback = callback; }
 
-    // 内部使用
+    // Internal use | 内部使用
     void _handleCommand(bool state);
     void _setParent(SeeedHADiscoveryBLE* parent) { _parent = parent; }
 
@@ -249,7 +267,7 @@ private:
 };
 
 // =============================================================================
-// SeeedHADiscoveryBLE - 主类
+// SeeedHADiscoveryBLE - Main Class | 主类
 // =============================================================================
 
 class SeeedHADiscoveryBLE {
@@ -258,7 +276,7 @@ public:
     ~SeeedHADiscoveryBLE();
 
     // =========================================================================
-    // 配置方法
+    // Configuration Methods | 配置方法
     // =========================================================================
 
     void setDeviceName(const char* name);
@@ -267,34 +285,38 @@ public:
     void setTxPower(int8_t power);
 
     // =========================================================================
-    // 初始化
+    // Initialization | 初始化
     // =========================================================================
 
     /**
+     * Initialize BLE (sensor only mode, passive broadcast)
      * 初始化 BLE（仅传感器模式，被动广播）
      */
     bool begin(const char* deviceName = "Seeed Sensor");
 
     /**
+     * Initialize BLE (bidirectional mode, supports control)
      * 初始化 BLE（双向通信模式，支持控制）
-     * @param deviceName 设备名称
-     * @param enableControl 是否启用控制功能（GATT 服务）
+     * @param deviceName Device name | 设备名称
+     * @param enableControl Whether to enable control (GATT service) | 是否启用控制功能（GATT 服务）
      */
     bool begin(const char* deviceName, bool enableControl);
 
     /**
-     * 停止 BLE
+     * Stop BLE | 停止 BLE
      */
     void stop();
 
     /**
+     * Handle BLE events (must call in loop)
+     * Used for handling GATT connections and commands
      * 处理 BLE 事件（必须在 loop 中调用）
      * 用于处理 GATT 连接和命令
      */
     void loop();
 
     // =========================================================================
-    // 传感器管理
+    // Sensor Management | 传感器管理
     // =========================================================================
 
     SeeedBLESensor* addSensor(BTHomeObjectId objectId);
@@ -304,26 +326,26 @@ public:
     SeeedBLESensor* addButton() { return addSensor(BTHOME_BUTTON); }
 
     // =========================================================================
-    // 开关管理
+    // Switch Management | 开关管理
     // =========================================================================
 
     /**
-     * 添加开关
-     * @param id 开关 ID
-     * @param name 开关名称
-     * @return 开关对象指针
+     * Add switch | 添加开关
+     * @param id Switch ID | 开关 ID
+     * @param name Switch name | 开关名称
+     * @return Switch object pointer | 开关对象指针
      */
     SeeedBLESwitch* addSwitch(const char* id, const char* name);
 
     // =========================================================================
-    // 广播
+    // Broadcasting | 广播
     // =========================================================================
 
     void advertise();
     void updateAdvertiseData();
 
     // =========================================================================
-    // 状态查询
+    // Status Queries | 状态查询
     // =========================================================================
 
     bool isRunning() const { return _running; }
@@ -332,7 +354,7 @@ public:
     String getAddress();
 
     // =========================================================================
-    // 内部方法（供回调使用）
+    // Internal Methods (for callbacks) | 内部方法（供回调使用）
     // =========================================================================
 
     void _handleCommand(const uint8_t* data, size_t length);
@@ -341,7 +363,7 @@ public:
     void _onDisconnect();
 
 private:
-    // 设备配置
+    // Device configuration | 设备配置
     char _deviceName[21];
     bool _debug;
     bool _running;
@@ -351,15 +373,15 @@ private:
     int8_t _txPower;
     uint8_t _packetId;
 
-    // 传感器和开关列表
+    // Sensor and switch lists | 传感器和开关列表
     std::vector<SeeedBLESensor*> _sensors;
     std::vector<SeeedBLESwitch*> _switches;
 
-    // 广播数据缓冲区
+    // Advertise data buffer | 广播数据缓冲区
     uint8_t _advData[31];
     uint8_t _advDataLen;
 
-    // 平台特定的 BLE 对象
+    // Platform-specific BLE objects | 平台特定的 BLE 对象
 #ifdef SEEED_BLE_ESP32
     NimBLEServer* _pServer;
     NimBLEService* _pControlService;
@@ -372,7 +394,7 @@ private:
     BLECharacteristic* _pStateChar;
 #endif
 
-    // 内部方法
+    // Internal methods | 内部方法
     void _buildAdvData();
     void _setupGATTServer();
     void _buildStateData(uint8_t* buffer, size_t* length);

@@ -1,9 +1,10 @@
 /**
  * ============================================================================
+ * Seeed Home Assistant Discovery - Implementation File
  * Seeed Home Assistant Discovery - 实现文件
- * Seeed Home Assistant Discovery - Implementation file
  * ============================================================================
  *
+ * This file contains the implementation of SeeedHADiscovery and SeeedHASensor classes.
  * 这个文件包含 SeeedHADiscovery 和 SeeedHASensor 类的实现。
  *
  * @author limengdu
@@ -12,7 +13,7 @@
 #include "SeeedHADiscovery.h"
 
 // =============================================================================
-// SeeedHASensor 实现 | SeeedHASensor Implementation
+// SeeedHASensor Implementation | SeeedHASensor 实现
 // =============================================================================
 
 SeeedHASensor::SeeedHASensor(
@@ -25,21 +26,22 @@ SeeedHASensor::SeeedHASensor(
     _name(name),
     _deviceClass(deviceClass),
     _unit(unit),
-    _stateClass("measurement"),  // 默认状态类别
+    _stateClass("measurement"),  // Default state class | 默认状态类别
     _icon(""),
     _value(0),
-    _precision(1),               // 默认 1 位小数
+    _precision(1),               // Default 1 decimal | 默认 1 位小数
     _hasValue(false),
     _ha(nullptr)
 {
-    // 构造函数初始化完成
+    // Constructor initialization complete | 构造函数初始化完成
 }
 
 void SeeedHASensor::setValue(float value) {
-    // 设置传感器值
+    // Set sensor value | 设置传感器值
     _value = value;
     _hasValue = true;
 
+    // Notify main class that value is updated
     // 通知主类，值已更新
     _notifyChange();
 }
@@ -57,41 +59,47 @@ void SeeedHASensor::setIcon(const String& icon) {
 }
 
 void SeeedHASensor::toJson(JsonObject& obj) const {
+    // Convert sensor info to JSON format
+    // This JSON is sent to Home Assistant
     // 将传感器信息转换为 JSON 格式
     // 这个 JSON 会发送给 Home Assistant
 
-    obj["id"] = _id;                   // 传感器 ID
-    obj["name"] = _name;               // 显示名称
-    obj["type"] = "sensor";            // 实体类型（固定为 sensor）
+    obj["id"] = _id;                   // Sensor ID | 传感器 ID
+    obj["name"] = _name;               // Display name | 显示名称
+    obj["type"] = "sensor";            // Entity type (fixed as sensor) | 实体类型（固定为 sensor）
 
+    // Device class (e.g., temperature, humidity)
     // 设备类别（如 temperature, humidity）
     if (_deviceClass.length() > 0) {
         obj["device_class"] = _deviceClass;
     }
 
+    // Unit (e.g., °C, %)
     // 单位（如 °C, %）
     if (_unit.length() > 0) {
         obj["unit_of_measurement"] = _unit;
     }
 
+    // State class (e.g., measurement, total)
     // 状态类别（如 measurement, total）
     obj["state_class"] = _stateClass;
 
-    // 显示精度
+    // Display precision | 显示精度
     obj["precision"] = _precision;
 
-    // 图标
+    // Icon | 图标
     if (_icon.length() > 0) {
         obj["icon"] = _icon;
     }
 
-    // 当前值（如果已设置）
+    // Current value (if set) | 当前值（如果已设置）
     if (_hasValue) {
         obj["state"] = _value;
     }
 }
 
 void SeeedHASensor::_notifyChange() {
+    // Notify main class that sensor value is updated
     // 通知主类，传感器值已更新
     if (_ha != nullptr) {
         _ha->_notifySensorChange(_id);
@@ -99,7 +107,7 @@ void SeeedHASensor::_notifyChange() {
 }
 
 // =============================================================================
-// SeeedHASwitch 实现 | SeeedHASwitch Implementation
+// SeeedHASwitch Implementation | SeeedHASwitch 实现
 // =============================================================================
 
 SeeedHASwitch::SeeedHASwitch(
@@ -114,29 +122,31 @@ SeeedHASwitch::SeeedHASwitch(
     _callback(nullptr),
     _ha(nullptr)
 {
-    // 构造函数初始化完成
+    // Constructor initialization complete | 构造函数初始化完成
 }
 
 void SeeedHASwitch::setState(bool state) {
+    // If state unchanged, do nothing
     // 如果状态没有变化，不做任何事
     if (_state == state) {
         return;
     }
 
-    // 更新状态
+    // Update state | 更新状态
     _state = state;
 
+    // Notify main class that state is updated (will send to HA)
     // 通知主类，状态已更新（会发送到 HA）
     _notifyChange();
 }
 
 void SeeedHASwitch::toggle() {
-    // 切换状态
+    // Toggle state | 切换状态
     setState(!_state);
 }
 
 void SeeedHASwitch::onStateChange(SwitchCallback callback) {
-    // 注册回调函数
+    // Register callback | 注册回调函数
     _callback = callback;
 }
 
@@ -145,36 +155,42 @@ void SeeedHASwitch::setIcon(const String& icon) {
 }
 
 void SeeedHASwitch::toJson(JsonObject& obj) const {
+    // Convert switch info to JSON format
+    // This JSON is sent to Home Assistant
     // 将开关信息转换为 JSON 格式
     // 这个 JSON 会发送给 Home Assistant
 
-    obj["id"] = _id;           // 开关 ID
-    obj["name"] = _name;       // 显示名称
-    obj["type"] = "switch";    // 实体类型（固定为 switch）
-    obj["state"] = _state;     // 当前状态
+    obj["id"] = _id;           // Switch ID | 开关 ID
+    obj["name"] = _name;       // Display name | 显示名称
+    obj["type"] = "switch";    // Entity type (fixed as switch) | 实体类型（固定为 switch）
+    obj["state"] = _state;     // Current state | 当前状态
 
-    // 图标
+    // Icon | 图标
     if (_icon.length() > 0) {
         obj["icon"] = _icon;
     }
 }
 
 void SeeedHASwitch::_handleCommand(bool state) {
-    // 处理来自 HA 的命令
+    // Handle command from HA | 处理来自 HA 的命令
 
+    // Update state first (but don't notify to avoid loop)
     // 先更新状态（但不通知，避免循环）
     _state = state;
 
+    // If callback exists, call it for hardware operation
     // 如果有回调，调用回调让用户处理硬件操作
     if (_callback != nullptr) {
         _callback(state);
     }
 
+    // Notify main class to send state confirmation to HA
     // 通知主类发送状态确认给 HA
     _notifyChange();
 }
 
 void SeeedHASwitch::_notifyChange() {
+    // Notify main class that switch state is updated
     // 通知主类，开关状态已更新
     if (_ha != nullptr) {
         _ha->_notifySwitchChange(_id);
@@ -182,11 +198,11 @@ void SeeedHASwitch::_notifyChange() {
 }
 
 // =============================================================================
-// SeeedHADiscovery 实现 | SeeedHADiscovery Implementation
+// SeeedHADiscovery Implementation | SeeedHADiscovery 实现
 // =============================================================================
 
 SeeedHADiscovery::SeeedHADiscovery() :
-    _deviceName("Seeed HA 设备"),
+    _deviceName("Seeed HA Device"),
     _deviceModel("ESP32"),
     _deviceVersion(SEEED_HA_DISCOVERY_VERSION),
     _httpServer(nullptr),
@@ -195,30 +211,30 @@ SeeedHADiscovery::SeeedHADiscovery() :
     _debug(false),
     _lastHeartbeat(0)
 {
-    // 生成设备 ID
+    // Generate device ID | 生成设备 ID
     _deviceId = _generateDeviceId();
 }
 
 SeeedHADiscovery::~SeeedHADiscovery() {
-    // 清理 HTTP 服务器
+    // Cleanup HTTP server | 清理 HTTP 服务器
     if (_httpServer != nullptr) {
         _httpServer->stop();
         delete _httpServer;
     }
 
-    // 清理 WebSocket 服务器
+    // Cleanup WebSocket server | 清理 WebSocket 服务器
     if (_wsServer != nullptr) {
         _wsServer->close();
         delete _wsServer;
     }
 
-    // 清理传感器
+    // Cleanup sensors | 清理传感器
     for (auto sensor : _sensors) {
         delete sensor;
     }
     _sensors.clear();
 
-    // 清理开关
+    // Cleanup switches | 清理开关
     for (auto sw : _switches) {
         delete sw;
     }
@@ -237,18 +253,18 @@ void SeeedHADiscovery::enableDebug(bool enable) {
 
 bool SeeedHADiscovery::begin(const char* ssid, const char* password) {
     _log("====================================");
-    _log("Seeed HA Discovery 启动中...");
+    _log("Seeed HA Discovery starting...");
     _log("====================================");
 
     // -------------------------------------------------------------------------
-    // 步骤 1: 连接 WiFi
+    // Step 1: Connect WiFi | 步骤 1: 连接 WiFi
     // -------------------------------------------------------------------------
-    _log("正在连接 WiFi: " + String(ssid));
+    _log("Connecting to WiFi: " + String(ssid));
 
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, password);
 
-    // 等待连接（最多 30 秒）
+    // Wait for connection (max 30 seconds) | 等待连接（最多 30 秒）
     int attempts = 0;
     while (WiFi.status() != WL_CONNECTED && attempts < 60) {
         delay(500);
@@ -262,97 +278,101 @@ bool SeeedHADiscovery::begin(const char* ssid, const char* password) {
         Serial.println();
     }
 
-    // 检查连接结果
+    // Check connection result | 检查连接结果
     if (WiFi.status() != WL_CONNECTED) {
-        _log("WiFi 连接失败！");
+        _log("WiFi connection failed!");
         return false;
     }
 
-    _log("WiFi 连接成功！");
-    _log("IP 地址: " + WiFi.localIP().toString());
-    _log("设备 ID: " + _deviceId);
+    _log("WiFi connected!");
+    _log("IP Address: " + WiFi.localIP().toString());
+    _log("Device ID: " + _deviceId);
 
     // -------------------------------------------------------------------------
+    // Step 2: Start mDNS service (for auto discovery)
     // 步骤 2: 启动 mDNS 服务（用于设备自动发现）
     // -------------------------------------------------------------------------
     _setupMDNS();
 
     // -------------------------------------------------------------------------
+    // Step 3: Start HTTP server (device info API)
     // 步骤 3: 启动 HTTP 服务器（提供设备信息接口）
     // -------------------------------------------------------------------------
     _setupHTTP();
 
     // -------------------------------------------------------------------------
+    // Step 4: Start WebSocket server (real-time communication)
     // 步骤 4: 启动 WebSocket 服务器（用于实时通信）
     // -------------------------------------------------------------------------
     _setupWebSocket();
 
     _log("====================================");
-    _log("所有服务已启动！");
-    _log("在浏览器中打开: http://" + WiFi.localIP().toString());
+    _log("All services started!");
+    _log("Open in browser: http://" + WiFi.localIP().toString());
     _log("====================================");
 
     return true;
 }
 
 void SeeedHADiscovery::_setupMDNS() {
-    // 生成主机名（基于设备 ID）
+    // Generate hostname (based on device ID) | 生成主机名（基于设备 ID）
     String hostname = "seeed-ha-" + _deviceId;
     hostname.toLowerCase();
 
-    _log("启动 mDNS 服务: " + hostname + ".local");
+    _log("Starting mDNS service: " + hostname + ".local");
 
     if (MDNS.begin(hostname.c_str())) {
+        // Register _seeed_ha._tcp service for Home Assistant discovery
         // 注册 _seeed_ha._tcp 服务，这样 Home Assistant 就能发现设备
         MDNS.addService("seeed_ha", "tcp", SEEED_HA_WS_PORT);
 
-        // 添加 TXT 记录，包含设备信息
+        // Add TXT records with device info | 添加 TXT 记录，包含设备信息
         MDNS.addServiceTxt("seeed_ha", "tcp", "id", _deviceId);
         MDNS.addServiceTxt("seeed_ha", "tcp", "name", _deviceName);
         MDNS.addServiceTxt("seeed_ha", "tcp", "model", _deviceModel);
         MDNS.addServiceTxt("seeed_ha", "tcp", "version", _deviceVersion);
 
-        _log("mDNS 服务已启动");
+        _log("mDNS service started");
     } else {
-        _log("mDNS 启动失败！");
+        _log("mDNS startup failed!");
     }
 }
 
 void SeeedHADiscovery::_setupHTTP() {
     _httpServer = new WebServer(SEEED_HA_HTTP_PORT);
 
-    // 注册路由处理器
+    // Register route handlers | 注册路由处理器
 
-    // 主页 - 显示设备状态页面
+    // Home page - display device status page | 主页 - 显示设备状态页面
     _httpServer->on("/", HTTP_GET, [this]() {
         _handleHTTPRoot();
     });
 
-    // 设备信息接口 - 返回 JSON 格式的设备信息
+    // Device info API - return JSON device info | 设备信息接口 - 返回 JSON 格式的设备信息
     _httpServer->on("/info", HTTP_GET, [this]() {
         _handleHTTPInfo();
     });
 
-    // 启动服务器
+    // Start server | 启动服务器
     _httpServer->begin();
-    _log("HTTP 服务器已启动，端口: " + String(SEEED_HA_HTTP_PORT));
+    _log("HTTP server started, port: " + String(SEEED_HA_HTTP_PORT));
 }
 
 void SeeedHADiscovery::_setupWebSocket() {
     _wsServer = new WebSocketsServer(SEEED_HA_WS_PORT);
 
-    // 注册 WebSocket 事件处理器
+    // Register WebSocket event handler | 注册 WebSocket 事件处理器
     _wsServer->onEvent([this](uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
         _handleWSEvent(num, type, payload, length);
     });
 
-    // 启动服务器
+    // Start server | 启动服务器
     _wsServer->begin();
-    _log("WebSocket 服务器已启动，端口: " + String(SEEED_HA_WS_PORT));
+    _log("WebSocket server started, port: " + String(SEEED_HA_WS_PORT));
 }
 
 void SeeedHADiscovery::_handleHTTPRoot() {
-    // 生成一个简单的状态页面
+    // Generate a simple status page | 生成一个简单的状态页面
     String html = R"(<!DOCTYPE html>
 <html>
 <head>
@@ -444,42 +464,42 @@ void SeeedHADiscovery::_handleHTTPRoot() {
         <h1>🌱 Seeed HA Discovery</h1>
 
         <div class="card">
-            <h2>设备信息</h2>
+            <h2>Device Info</h2>
             <div class="info-row">
-                <span class="label">设备名称</span>
+                <span class="label">Device Name</span>
                 <span class="value">)" + _deviceName + R"(</span>
             </div>
             <div class="info-row">
-                <span class="label">设备型号</span>
+                <span class="label">Device Model</span>
                 <span class="value">)" + _deviceModel + R"(</span>
             </div>
             <div class="info-row">
-                <span class="label">固件版本</span>
+                <span class="label">Firmware Version</span>
                 <span class="value">)" + _deviceVersion + R"(</span>
             </div>
             <div class="info-row">
-                <span class="label">设备 ID</span>
+                <span class="label">Device ID</span>
                 <span class="value">)" + _deviceId + R"(</span>
             </div>
             <div class="info-row">
-                <span class="label">IP 地址</span>
+                <span class="label">IP Address</span>
                 <span class="value">)" + WiFi.localIP().toString() + R"(</span>
             </div>
             <div class="info-row">
                 <span class="label">Home Assistant</span>
                 <span class="status )" + String(_wsClientConnected ? "online" : "") + R"(">
-                    )" + String(_wsClientConnected ? "已连接" : "等待连接") + R"(
+                    )" + String(_wsClientConnected ? "Connected" : "Waiting") + R"(
                 </span>
             </div>
         </div>
 
         <div class="card">
-            <h2>传感器</h2>)";
+            <h2>Sensors</h2>)";
 
-    // 添加传感器列表
+    // Add sensor list | 添加传感器列表
     if (_sensors.empty()) {
         html += R"(
-            <p style="color: #888;">暂无传感器</p>)";
+            <p style="color: #888;">No sensors</p>)";
     } else {
         for (auto sensor : _sensors) {
             html += R"(
@@ -497,16 +517,16 @@ void SeeedHADiscovery::_handleHTTPRoot() {
         </div>
 
         <div class="card">
-            <h2>开关</h2>)";
+            <h2>Switches</h2>)";
 
-    // 添加开关列表
+    // Add switch list | 添加开关列表
     if (_switches.empty()) {
         html += R"(
-            <p style="color: #888;">暂无开关</p>)";
+            <p style="color: #888;">No switches</p>)";
     } else {
         for (auto sw : _switches) {
             String stateClass = sw->getState() ? "on" : "off";
-            String stateText = sw->getState() ? "开启" : "关闭";
+            String stateText = sw->getState() ? "ON" : "OFF";
             html += R"(
             <div class="sensor">
                 <div class="sensor-name">)" + sw->getName() + R"(</div>
@@ -531,6 +551,8 @@ void SeeedHADiscovery::_handleHTTPRoot() {
 }
 
 void SeeedHADiscovery::_handleHTTPInfo() {
+    // Return JSON device info
+    // Home Assistant calls this API to get device info
     // 返回 JSON 格式的设备信息
     // Home Assistant 会调用这个接口获取设备信息
 
@@ -553,41 +575,41 @@ void SeeedHADiscovery::_handleHTTPInfo() {
 void SeeedHADiscovery::_handleWSEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
     switch (type) {
         case WStype_DISCONNECTED:
-            // 客户端断开连接
-            _log("WebSocket 客户端 #" + String(num) + " 断开连接");
+            // Client disconnected | 客户端断开连接
+            _log("WebSocket client #" + String(num) + " disconnected");
             _wsClientConnected = false;
             break;
 
         case WStype_CONNECTED: {
-            // 新客户端连接
+            // New client connected | 新客户端连接
             IPAddress ip = _wsServer->remoteIP(num);
-            _log("WebSocket 客户端 #" + String(num) + " 已连接，来自 " + ip.toString());
+            _log("WebSocket client #" + String(num) + " connected from " + ip.toString());
             _wsClientConnected = true;
 
-            // 向新客户端发送发现信息
+            // Send discovery info to new client | 向新客户端发送发现信息
             _sendDiscovery(num);
             break;
         }
 
         case WStype_TEXT: {
-            // 收到文本消息
+            // Received text message | 收到文本消息
             String message = String((char*)payload);
-            _log("收到消息: " + message);
+            _log("Message received: " + message);
 
-            // 解析 JSON
+            // Parse JSON | 解析 JSON
             JsonDocument doc;
             DeserializationError error = deserializeJson(doc, message);
 
             if (error) {
-                _log("JSON 解析错误: " + String(error.c_str()));
+                _log("JSON parse error: " + String(error.c_str()));
                 return;
             }
 
-            // 获取消息类型
+            // Get message type | 获取消息类型
             String msgType = doc["type"].as<String>();
 
             if (msgType == "ping") {
-                // 心跳请求，回复 pong
+                // Heartbeat request, reply pong | 心跳请求，回复 pong
                 JsonDocument response;
                 response["type"] = "pong";
                 response["timestamp"] = doc["timestamp"];
@@ -597,13 +619,13 @@ void SeeedHADiscovery::_handleWSEvent(uint8_t num, WStype_t type, uint8_t* paylo
                 _wsServer->sendTXT(num, responseStr);
             }
             else if (msgType == "discovery") {
-                // 发现请求，发送实体列表
+                // Discovery request, send entity list | 发现请求，发送实体列表
                 _sendDiscovery(num);
             }
             else if (msgType == "command") {
-                // 来自 HA 的控制命令
-                // 格式: {type: "command", entity_id: "led", command: "turn_on"} 或
-                //       {type: "command", entity_id: "led", state: true}
+                // Control command from HA | 来自 HA 的控制命令
+                // Format: {type: "command", entity_id: "led", command: "turn_on"} or
+                // 格式: {type: "command", entity_id: "led", state: true}
                 _handleCommand(doc);
             }
             break;
@@ -615,42 +637,42 @@ void SeeedHADiscovery::_handleWSEvent(uint8_t num, WStype_t type, uint8_t* paylo
 }
 
 void SeeedHADiscovery::_sendDiscovery(uint8_t clientNum) {
-    // 构建发现消息
+    // Build discovery message | 构建发现消息
     JsonDocument doc;
     doc["type"] = "discovery";
 
     JsonArray entities = doc["entities"].to<JsonArray>();
 
-    // 添加所有传感器
+    // Add all sensors | 添加所有传感器
     for (auto sensor : _sensors) {
         JsonObject obj = entities.add<JsonObject>();
         sensor->toJson(obj);
     }
 
-    // 添加所有开关
+    // Add all switches | 添加所有开关
     for (auto sw : _switches) {
         JsonObject obj = entities.add<JsonObject>();
         sw->toJson(obj);
     }
 
-    // 序列化并发送
+    // Serialize and send | 序列化并发送
     String message;
     serializeJson(doc, message);
 
     if (clientNum == 255) {
-        // 广播给所有客户端
+        // Broadcast to all clients | 广播给所有客户端
         _broadcastMessage(message);
     } else {
-        // 发送给指定客户端
+        // Send to specific client | 发送给指定客户端
         _wsServer->sendTXT(clientNum, message);
     }
 
-    _log("已发送发现信息: " + String(_sensors.size()) + " 个传感器, " +
-         String(_switches.size()) + " 个开关");
+    _log("Sent discovery info: " + String(_sensors.size()) + " sensors, " +
+         String(_switches.size()) + " switches");
 }
 
 void SeeedHADiscovery::_sendSensorState(const String& sensorId, uint8_t clientNum) {
-    // 查找传感器
+    // Find sensor | 查找传感器
     SeeedHASensor* sensor = nullptr;
     for (auto s : _sensors) {
         if (s->getId() == sensorId) {
@@ -663,18 +685,18 @@ void SeeedHADiscovery::_sendSensorState(const String& sensorId, uint8_t clientNu
         return;
     }
 
-    // 构建状态更新消息
+    // Build state update message | 构建状态更新消息
     JsonDocument doc;
     doc["type"] = "state";
     doc["entity_id"] = sensorId;
     doc["state"] = sensor->getValue();
 
-    // 可以添加额外属性
+    // Add extra attributes | 可以添加额外属性
     JsonObject attrs = doc["attributes"].to<JsonObject>();
     attrs["unit_of_measurement"] = sensor->getUnit();
     attrs["device_class"] = sensor->getDeviceClass();
 
-    // 序列化并发送
+    // Serialize and send | 序列化并发送
     String message;
     serializeJson(doc, message);
 
@@ -684,10 +706,11 @@ void SeeedHADiscovery::_sendSensorState(const String& sensorId, uint8_t clientNu
         _wsServer->sendTXT(clientNum, message);
     }
 
-    _log("发送状态更新: " + sensorId + " = " + String(sensor->getValue()));
+    _log("Sent state update: " + sensorId + " = " + String(sensor->getValue()));
 }
 
 void SeeedHADiscovery::_broadcastMessage(const String& message) {
+    // WebSockets library needs non-const reference, so create copy
     // WebSockets 库的 broadcastTXT 需要非 const 引用，所以创建副本
     String msg = message;
     _wsServer->broadcastTXT(msg);
@@ -699,14 +722,14 @@ SeeedHASensor* SeeedHADiscovery::addSensor(
     const String& deviceClass,
     const String& unit
 ) {
-    // 创建新传感器
+    // Create new sensor | 创建新传感器
     SeeedHASensor* sensor = new SeeedHASensor(id, name, deviceClass, unit);
     sensor->_ha = this;
 
-    // 添加到列表
+    // Add to list | 添加到列表
     _sensors.push_back(sensor);
 
-    _log("添加传感器: " + name + " (ID: " + id + ")");
+    _log("Added sensor: " + name + " (ID: " + id + ")");
 
     return sensor;
 }
@@ -716,19 +739,20 @@ SeeedHASwitch* SeeedHADiscovery::addSwitch(
     const String& name,
     const String& icon
 ) {
-    // 创建新开关
+    // Create new switch | 创建新开关
     SeeedHASwitch* sw = new SeeedHASwitch(id, name, icon);
     sw->_ha = this;
 
-    // 添加到列表
+    // Add to list | 添加到列表
     _switches.push_back(sw);
 
-    _log("添加开关: " + name + " (ID: " + id + ")");
+    _log("Added switch: " + name + " (ID: " + id + ")");
 
     return sw;
 }
 
 void SeeedHADiscovery::_notifySensorChange(const String& sensorId) {
+    // When sensor value changes, send state update
     // 当传感器值变化时，发送状态更新
     if (_wsClientConnected) {
         _sendSensorState(sensorId);
@@ -736,6 +760,7 @@ void SeeedHADiscovery::_notifySensorChange(const String& sensorId) {
 }
 
 void SeeedHADiscovery::_notifySwitchChange(const String& switchId) {
+    // When switch state changes, send state update
     // 当开关状态变化时，发送状态更新
     if (_wsClientConnected) {
         _sendSwitchState(switchId);
@@ -743,7 +768,7 @@ void SeeedHADiscovery::_notifySwitchChange(const String& switchId) {
 }
 
 void SeeedHADiscovery::_sendSwitchState(const String& switchId, uint8_t clientNum) {
-    // 查找开关
+    // Find switch | 查找开关
     SeeedHASwitch* sw = nullptr;
     for (auto s : _switches) {
         if (s->getId() == switchId) {
@@ -756,13 +781,13 @@ void SeeedHADiscovery::_sendSwitchState(const String& switchId, uint8_t clientNu
         return;
     }
 
-    // 构建状态更新消息
+    // Build state update message | 构建状态更新消息
     JsonDocument doc;
     doc["type"] = "state";
     doc["entity_id"] = switchId;
     doc["state"] = sw->getState();
 
-    // 序列化并发送
+    // Serialize and send | 序列化并发送
     String message;
     serializeJson(doc, message);
 
@@ -772,32 +797,36 @@ void SeeedHADiscovery::_sendSwitchState(const String& switchId, uint8_t clientNu
         _wsServer->sendTXT(clientNum, message);
     }
 
-    _log("发送开关状态: " + switchId + " = " + String(sw->getState() ? "ON" : "OFF"));
+    _log("Sent switch state: " + switchId + " = " + String(sw->getState() ? "ON" : "OFF"));
 }
 
 void SeeedHADiscovery::_handleCommand(JsonDocument& doc) {
+    // Handle control command from Home Assistant
     // 处理来自 Home Assistant 的控制命令
+    // Format 1: {type: "command", entity_id: "led", command: "turn_on"}
+    // Format 2: {type: "command", entity_id: "led", state: true}
     // 格式 1: {type: "command", entity_id: "led", command: "turn_on"}
     // 格式 2: {type: "command", entity_id: "led", state: true}
 
     String entityId = doc["entity_id"].as<String>();
 
     if (entityId.length() == 0) {
-        _log("命令错误: 缺少 entity_id");
+        _log("Command error: missing entity_id");
         return;
     }
 
-    // 确定目标状态
+    // Determine target state | 确定目标状态
     bool targetState = false;
 
     if (doc["command"].is<String>()) {
-        // 格式 1: 使用命令字符串
+        // Format 1: Use command string | 格式 1: 使用命令字符串
         String command = doc["command"].as<String>();
         if (command == "turn_on") {
             targetState = true;
         } else if (command == "turn_off") {
             targetState = false;
         } else if (command == "toggle") {
+            // Need to find switch to get current state
             // 需要先找到开关获取当前状态
             for (auto sw : _switches) {
                 if (sw->getId() == entityId) {
@@ -806,47 +835,47 @@ void SeeedHADiscovery::_handleCommand(JsonDocument& doc) {
                 }
             }
         } else {
-            _log("未知命令: " + command);
+            _log("Unknown command: " + command);
             return;
         }
     } else if (doc["state"].is<bool>()) {
-        // 格式 2: 直接使用状态值
+        // Format 2: Use state value directly | 格式 2: 直接使用状态值
         targetState = doc["state"].as<bool>();
     } else {
-        _log("命令错误: 缺少 command 或 state");
+        _log("Command error: missing command or state");
         return;
     }
 
-    // 查找并执行命令
+    // Find and execute command | 查找并执行命令
     for (auto sw : _switches) {
         if (sw->getId() == entityId) {
-            _log("执行命令: " + entityId + " -> " + String(targetState ? "ON" : "OFF"));
+            _log("Executing command: " + entityId + " -> " + String(targetState ? "ON" : "OFF"));
             sw->_handleCommand(targetState);
             return;
         }
     }
 
-    _log("未找到开关: " + entityId);
+    _log("Switch not found: " + entityId);
 }
 
 void SeeedHADiscovery::handle() {
-    // 处理 HTTP 请求
+    // Handle HTTP requests | 处理 HTTP 请求
     if (_httpServer != nullptr) {
         _httpServer->handleClient();
     }
 
-    // 处理 WebSocket
+    // Handle WebSocket | 处理 WebSocket
     if (_wsServer != nullptr) {
         _wsServer->loop();
     }
 
-    // 定期心跳（每 30 秒）
+    // Periodic heartbeat (every 30 seconds) | 定期心跳（每 30 秒）
     unsigned long now = millis();
     if (now - _lastHeartbeat > 30000) {
         _lastHeartbeat = now;
 
         if (_wsClientConnected) {
-            // 发送心跳
+            // Send heartbeat | 发送心跳
             JsonDocument doc;
             doc["type"] = "ping";
             doc["timestamp"] = now;
@@ -871,6 +900,7 @@ IPAddress SeeedHADiscovery::getLocalIP() const {
 }
 
 String SeeedHADiscovery::_generateDeviceId() {
+    // Generate unique device ID using MAC address
     // 使用 MAC 地址生成唯一设备 ID
     uint8_t mac[6];
     WiFi.macAddress(mac);
