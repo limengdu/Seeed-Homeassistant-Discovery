@@ -810,6 +810,18 @@ public:
     bool isHAConnected() const;
 
     /**
+     * Notify Home Assistant that device is about to enter sleep mode
+     * 通知 Home Assistant 设备即将进入休眠模式
+     *
+     * Call this before entering deep sleep so HA can start reconnecting immediately.
+     * 在进入深度睡眠前调用此方法，让 HA 可以立即开始重连。
+     *
+     * This sends a "sleep" message to HA and closes the WebSocket connection.
+     * 这会发送一个 "sleep" 消息到 HA 并关闭 WebSocket 连接。
+     */
+    void notifySleep();
+
+    /**
      * Get local IP address
      * 获取本机 IP 地址
      */

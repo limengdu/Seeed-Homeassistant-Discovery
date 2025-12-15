@@ -189,13 +189,21 @@ class SeeedHACoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # 收到设备发现 | Received device discovery
         _LOGGER.info("Received device discovery: %d entities", len(entities))
 
+        # Log entity states for debugging | 记录实体状态用于调试
         for entity in entities:
-            _LOGGER.debug("Entity: %s", entity)
+            entity_id = entity.get("id")
+            entity_type = entity.get("type")
+            entity_state = entity.get("state")
+            _LOGGER.info("Entity discovered: %s (type=%s, state=%s)", 
+                        entity_id, entity_type, entity_state)
 
         # 标记发现完成
         self._discovery_complete.set()
 
-        # 更新数据
+        # 更新数据 - 这会触发所有 CoordinatorEntity 刷新状态
+        # Update data - this triggers all CoordinatorEntity to refresh state
+        _LOGGER.info("Triggering coordinator data update for %d entities", 
+                    len(self.device.entities))
         self.async_set_updated_data({"entities": self.device.entities})
 
     async def _async_update_data(self) -> dict[str, Any]:

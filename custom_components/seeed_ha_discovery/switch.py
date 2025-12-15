@@ -227,9 +227,11 @@ class SeeedHASwitch(CoordinatorEntity, SwitchEntity):
         if self._entity_id in entities:
             state = entities[self._entity_id].get("state")
             # 开关当前状态 | Switch current state
-            _LOGGER.debug("Switch %s current state: %s", self._entity_id, state)
+            _LOGGER.debug("Switch %s reading state from entities: %s (type=%s)", 
+                         self._entity_id, state, type(state).__name__)
             return bool(state)
-
+        
+        _LOGGER.warning("Switch %s not found in entities", self._entity_id)
         return False
 
     async def async_turn_on(self, **kwargs: Any) -> None:

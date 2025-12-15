@@ -46,6 +46,7 @@ from .const import (
     MSG_TYPE_COMMAND,
     MSG_TYPE_HA_STATE,
     MSG_TYPE_HA_STATE_CLEAR,
+    MSG_TYPE_SLEEP,
     HEARTBEAT_INTERVAL,
     RECONNECT_INTERVAL,
     DEFAULT_HTTP_PORT,
@@ -426,32 +427,33 @@ class SeeedHADevice:
                 except Exception as err:
                     _LOGGER.error("Discovery callback error: %s", err)
 
+        elif msg_type == MSG_TYPE_SLEEP:
+            # 设备休眠通知 - 立即标记断开并开始重连
+            # Device sleep notification - immediately mark disconnected and start reconnect
+            _LOGGER.info("Device entering sleep mode: %s", self.host)
+            self._connected = False
+            
+            # 关闭当前 WebSocket 连接
+            if self._ws and not self._ws.closed:
+                await self._ws.close()
+            
+            # 立即启动重连任务
+            if not self._reconnect_task:
+                self._reconnect_task = asyncio.create_task(self._async_reconnect())
+
     async def _async_reconnect(self) -> None:
         """
-        自动重连
-        Reconnect to the device.
-
-        在连接断开后持续尝试重连，直到成功。
-        Continuously try to reconnect until successful.
-        重连间隔由 RECONNECT_INTERVAL 定义。
-        Reconnect interval is defined by RECONNECT_INTERVAL.
+        自动重连（固定间隔）
+        Reconnect to the device (fixed interval).
         """
         while not self._connected:
-            # 尝试重连 | Trying to reconnect
-            _LOGGER.info("Trying to reconnect: %s", self.host)
-            await asyncio.sleep(RECONNECT_INTERVAL)
-
             if await self.async_connect():
-                # 重连成功 | Reconnected successfully
-                _LOGGER.info("Reconnected successfully: %s", self.host)
-                
                 # 重连后恢复实体订阅 | Restore entity subscription after reconnect
                 if self._subscribed_entities:
-                    _LOGGER.info("Restoring entity subscription: %d entities", len(self._subscribed_entities))
-                    # 重新发送订阅的实体状态 | Re-send subscribed entity states
                     await self._async_restore_entity_subscription()
-                
                 break
+            
+            await asyncio.sleep(RECONNECT_INTERVAL)
 
         self._reconnect_task = None
 

@@ -1035,6 +1035,26 @@ bool SeeedHADiscovery::isHAConnected() const {
     return _wsClientConnected;
 }
 
+void SeeedHADiscovery::notifySleep() {
+    // 通知 HA 设备即将进入休眠模式
+    // Notify HA that device is about to enter sleep mode
+    if (_wsClientConnected && _wsServer) {
+        JsonDocument doc;
+        doc["type"] = "sleep";
+        doc["timestamp"] = millis();
+        
+        String message;
+        serializeJson(doc, message);
+        _broadcastMessage(message);
+        
+        _log("Notified HA: entering sleep mode");
+        
+        // 给 WebSocket 一点时间发送消息
+        // Give WebSocket a moment to send the message
+        delay(50);
+    }
+}
+
 IPAddress SeeedHADiscovery::getLocalIP() const {
     return WiFi.localIP();
 }

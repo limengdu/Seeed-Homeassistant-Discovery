@@ -61,17 +61,14 @@ DEFAULT_WS_PORT: Final = 81
 # Default camera server port
 DEFAULT_CAMERA_PORT: Final = 82
 
-# 重连间隔（秒）
-# Reconnect interval in seconds
-RECONNECT_INTERVAL: Final = 30
+# 重连间隔（秒）| Reconnect interval in seconds
+RECONNECT_INTERVAL: Final = 5
 
 # 心跳间隔（秒）
 # Heartbeat interval in seconds
-# Note: Increased to 60s to accommodate E-Paper display refresh
-# which can take 30+ seconds and blocks the device
-# 注意：增加到 60 秒以适应墨水屏刷新
-# 墨水屏刷新可能需要 30 秒以上并阻塞设备
-HEARTBEAT_INTERVAL: Final = 60
+# 较短的心跳间隔可以更快检测到设备离线（如深度睡眠）
+# Shorter heartbeat allows faster detection of device offline (e.g. deep sleep)
+HEARTBEAT_INTERVAL: Final = 10
 
 # =============================================================================
 # mDNS 配置 | mDNS Configuration
@@ -114,6 +111,10 @@ MSG_TYPE_HA_STATE: Final = "ha_state"
 # HA 状态清除 - 清除设备上所有订阅的 HA 状态
 # HA state clear - clear all subscribed HA states on device
 MSG_TYPE_HA_STATE_CLEAR: Final = "ha_state_clear"
+
+# 设备休眠通知 - 设备即将进入休眠模式
+# Device sleep notification - device is about to enter sleep mode
+MSG_TYPE_SLEEP: Final = "sleep"
 
 # =============================================================================
 # 实体订阅配置 | Entity Subscription Configuration
