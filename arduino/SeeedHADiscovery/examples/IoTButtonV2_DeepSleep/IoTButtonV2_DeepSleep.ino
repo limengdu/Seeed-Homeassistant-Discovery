@@ -16,8 +16,8 @@
  *    深度睡眠模式，GPIO 唤醒，最低功耗（约 10µA）
  * 5. WiFi connectivity with Home Assistant integration
  *    WiFi 连接与 Home Assistant 集成
- * 6. Smart sleep timeout: 5s after HA connected, 3min before connection
- *    智能休眠超时：HA 连接后 5 秒，连接前 3 分钟
+ * 6. Smart sleep timeout: 10s after HA connected, 3min before connection (resets on each button action)
+ *    智能休眠超时：HA 连接后 10 秒，连接前 3 分钟（每次按键操作重置）
  * 7. Dev mode (triple click): 3 minute timeout for firmware upload
  *    开发模式（三击）：3 分钟超时，便于上传固件
  * 8. Seamless wake-up: wake-up press counts as first click in sequence
@@ -128,8 +128,8 @@ const char* WIFI_PASSWORD = "Your_WiFi_Password";  // Your WiFi password | 你�
 #define BATTERY_JUMP_THRESHOLD  5.0f   // Anti-jump threshold (%) | 防跳变阈值（%）
 
 // Sleep Parameters | 休眠参数
-#define SLEEP_CHECK_INTERVAL           10000   // Sleep check interval (ms) | 休眠检查间隔（毫秒）
-#define INACTIVITY_TIMEOUT_HA_CONNECTED 5000   // Sleep timeout after HA connected (ms) | HA连接后休眠超时（毫秒）
+#define SLEEP_CHECK_INTERVAL           1000    // Sleep check interval (ms) | 休眠检查间隔（毫秒）- 减小以更快响应
+#define INACTIVITY_TIMEOUT_HA_CONNECTED 10000  // Sleep timeout after HA connected (ms) | HA连接后休眠超时（毫秒）
 #define INACTIVITY_TIMEOUT_NOT_CONNECTED 180000 // Sleep timeout before HA connected (ms) | HA未连接时休眠超时（毫秒）
 #define INACTIVITY_TIMEOUT_DEV_MODE    180000  // Dev mode sleep timeout (ms) | 开发模式休眠超时（毫秒）
 
@@ -1275,8 +1275,20 @@ void setup() {
     Serial.println();
     Serial.println("Creating switches...");
     
+    // IMPORTANT: Load saved switch states FIRST to ensure correct initial state
+    // 重要：首先加载保存的开关状态以确保正确的初始状态
+    // This prevents switches from appearing ON after reset/upload
+    // 这可以防止重置/上传后开关显示为开启状态
+    bool s1State = preferences.getBool("switch1", false);
+    bool s2State = preferences.getBool("switch2", false);
+    bool s3State = preferences.getBool("switch3", false);
+    Serial.printf("  - Loaded saved states: S1=%d, S2=%d, S3=%d\n", s1State, s2State, s3State);
+    
     // Switch 1 (Single click) | 开关1（单击）
+    // Create switch, set state immediately, THEN register callback
+    // 创建开关，立即设置状态，然后再注册回调
     switch1 = ha.addSwitch("switch1", "Switch 1", "mdi:gesture-tap");
+    switch1->setState(s1State);  // Set correct state BEFORE registering callback | 在注册回调之前设置正确状态
     switch1->onStateChange([](bool state) {
         Serial.printf("HA Control [Switch 1]: %s\n", state ? "ON" : "OFF");
         last_activity_time = millis();
@@ -1287,6 +1299,7 @@ void setup() {
     
     // Switch 2 (Double click) | 开关2（双击）
     switch2 = ha.addSwitch("switch2", "Switch 2", "mdi:gesture-double-tap");
+    switch2->setState(s2State);  // Set correct state BEFORE registering callback | 在注册回调之前设置正确状态
     switch2->onStateChange([](bool state) {
         Serial.printf("HA Control [Switch 2]: %s\n", state ? "ON" : "OFF");
         last_activity_time = millis();
@@ -1297,6 +1310,7 @@ void setup() {
     
     // Switch 3 (Long press) | 开关3（长按）
     switch3 = ha.addSwitch("switch3", "Switch 3", "mdi:gesture-tap-hold");
+    switch3->setState(s3State);  // Set correct state BEFORE registering callback | 在注册回调之前设置正确状态
     switch3->onStateChange([](bool state) {
         Serial.printf("HA Control [Switch 3]: %s\n", state ? "ON" : "OFF");
         last_activity_time = millis();
@@ -1304,16 +1318,6 @@ void setup() {
         preferences.putBool("switch3", state);
     });
     Serial.println("  - Switch 3 created");
-    
-    // Load saved switch states | 加载保存的开关状态
-    bool s1State = preferences.getBool("switch1", false);
-    bool s2State = preferences.getBool("switch2", false);
-    bool s3State = preferences.getBool("switch3", false);
-    
-    switch1->setState(s1State);
-    switch2->setState(s2State);
-    switch3->setState(s3State);
-    Serial.printf("  - Restored states: S1=%d, S2=%d, S3=%d\n", s1State, s2State, s3State);
     
     // =========================================================================
     // Initial battery reading | 初始电池读数
@@ -1348,10 +1352,11 @@ void setup() {
     Serial.println("  - Triple click: Toggle Dev Mode (3 min sleep timeout)");
     Serial.println("  - Long press (1-2s): Toggle Switch 3 + Rainbow effect");
     Serial.println();
-    Serial.println("Sleep timeouts:");
-    Serial.printf("  - HA connected: %d seconds\n", INACTIVITY_TIMEOUT_HA_CONNECTED / 1000);
-    Serial.printf("  - HA not connected: %d seconds\n", INACTIVITY_TIMEOUT_NOT_CONNECTED / 1000);
-    Serial.printf("  - Dev mode: %d seconds\n", INACTIVITY_TIMEOUT_DEV_MODE / 1000);
+    Serial.println("Sleep timeouts (reset on each button action):");
+    Serial.println("  休眠超时（每次按键操作重置）：");
+    Serial.printf("  - HA connected: %d seconds | HA已连接：%d秒\n", INACTIVITY_TIMEOUT_HA_CONNECTED / 1000, INACTIVITY_TIMEOUT_HA_CONNECTED / 1000);
+    Serial.printf("  - HA not connected: %d seconds | HA未连接：%d秒\n", INACTIVITY_TIMEOUT_NOT_CONNECTED / 1000, INACTIVITY_TIMEOUT_NOT_CONNECTED / 1000);
+    Serial.printf("  - Dev mode: %d seconds | 开发模式：%d秒\n", INACTIVITY_TIMEOUT_DEV_MODE / 1000, INACTIVITY_TIMEOUT_DEV_MODE / 1000);
     Serial.println();
     Serial.println("Waiting for events...");
     Serial.println();
