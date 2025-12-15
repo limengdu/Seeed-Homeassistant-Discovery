@@ -124,7 +124,7 @@ const char* WIFI_PASSWORD = "Your_WiFi_Password";  // Your WiFi password | 你�
 // Battery Monitoring | 电池监测
 #define BATTERY_VOLTAGE_MIN     2.75f  // 0% voltage | 0% 电压
 #define BATTERY_VOLTAGE_MAX     4.2f   // 100% voltage | 100% 电压
-#define BATTERY_ADC_MULTIPLIER  3.0f   // ADC to actual voltage multiplier | ADC 到实际电压乘数
+#define BATTERY_ADC_MULTIPLIER  4.0f   // ADC to actual voltage multiplier | ADC 到实际电压乘数
 #define BATTERY_JUMP_THRESHOLD  5.0f   // Anti-jump threshold (%) | 防跳变阈值（%）
 
 // Sleep Parameters | 休眠参数
