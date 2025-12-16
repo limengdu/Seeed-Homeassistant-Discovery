@@ -83,7 +83,7 @@
  * - Double click: Toggle Switch 2, sleep in 10s (if HA connected) | 双击：切换开关 2，10秒后休眠（HA已连接时）
  * - Triple click: Dev Mode, sleep in 3 min | 三击：开发模式，3分钟后休眠
  * - Long press (1-5s): Toggle Switch 3, sleep in 10s (if HA connected) | 长按（1-5秒）：切换开关 3，10秒后休眠（HA已连接时）
- * - Long press (6s+): Reset WiFi credentials and start AP mode | 长按（6秒以上）：重置 WiFi 凭据并启动 AP 模式
+ * - Long press (6s+): LED flash feedback at 6s, release to reset WiFi | 长按（6秒以上）：6秒时LED闪烁提示，松开后重置WiFi
  *
  * Entities exposed to Home Assistant:
  * 暴露给 Home Assistant 的实体：
@@ -183,6 +183,9 @@ const char* WIFI_PASSWORD = "Your_WiFi_Password";  // Your WiFi password | 你�
 #define TRIPLE_CLICK_GAP_TIME   350    // Triple click max release gap (ms) | 三击最大释放间隔（毫秒）
 #define TRIPLE_CLICK_MAX_PRESS  400    // Triple click max press time (ms) | 三击单次最大按下时间（毫秒）
 
+// WiFi Reset Parameters | WiFi 重置参数
+#define WIFI_RESET_HOLD_TIME    6000   // Hold 6 seconds to trigger WiFi reset | 长按6秒触发WiFi重置
+
 // RGB LED Effect Duration | RGB LED 灯效持续时间
 #define RGB_EFFECT_DURATION     1000   // Effect duration (ms) | 灯效持续时间（毫秒）
 
@@ -258,6 +261,9 @@ uint32_t effectColor = 0;  // For Subtle Flicker base color | 用于微闪的基
 // WiFi state tracking | WiFi 状态跟踪
 bool wasWiFiConnected = false;
 bool wifiProvisioningMode = false;  // Whether in AP mode for provisioning | 是否处于 AP 配网模式
+
+// WiFi reset tracking | WiFi 重置跟踪
+bool wifiResetFeedbackGiven = false;  // Whether 6s threshold feedback has been shown | 是否已显示6秒阈值反馈
 
 // =============================================================================
 // LED Control Functions | LED 控制函数
@@ -536,8 +542,44 @@ ButtonEvent detectButtonEvent() {
     if (lastButtonState == HIGH && currentState == LOW) {
         button_press_time = now;
         last_activity_time = now;  // Update activity time | 更新活动时间
+        wifiResetFeedbackGiven = false;  // Reset feedback flag | 重置反馈标志
         updateButtonState(true);
         Serial.println("Button pressed");
+    }
+    
+    // While button is held, check for WiFi reset threshold (6 seconds)
+    // 按钮按住时，检查WiFi重置阈值（6秒）
+    if (currentState == LOW && button_press_time > 0) {
+        uint32_t holdDuration = now - button_press_time;
+        
+        // Give feedback when reaching 6 seconds threshold | 达到6秒阈值时给出反馈
+        if (holdDuration >= WIFI_RESET_HOLD_TIME && !wifiResetFeedbackGiven) {
+            wifiResetFeedbackGiven = true;
+            Serial.println();
+            Serial.println("=========================================");
+            Serial.println("  WiFi Reset threshold reached (6s)!");
+            Serial.println("  WiFi 重置阈值已达到（6秒）！");
+            Serial.println("  Release button to reset WiFi...");
+            Serial.println("  松开按钮以重置 WiFi...");
+            Serial.println("=========================================");
+            
+            // Visual feedback: RGB LED red flash + both LEDs blink
+            // 视觉反馈：RGB LED红色闪烁 + 双灯闪烁
+            for (int i = 0; i < 5; i++) {
+                setRGBLED(255, 0, 0);  // Red | 红色
+                setRedLED(true);
+                setBlueLED(true);
+                delay(80);
+                turnOffRGBLED();
+                setRedLED(false);
+                setBlueLED(false);
+                delay(80);
+            }
+            // Keep red LED + RGB red on to indicate ready to reset
+            // 保持红灯 + RGB红色亮起，指示准备重置
+            setRedLED(true);
+            setRGBLED(255, 0, 0);
+        }
     }
     
     // Detect release (LOW -> HIGH transition)
@@ -547,6 +589,34 @@ ButtonEvent detectButtonEvent() {
         last_activity_time = now;  // Update activity time | 更新活动时间
         updateButtonState(false);
         Serial.printf("Button released after %lu ms\n", pressDuration);
+        
+        // Check for WiFi reset (6+ seconds) | 检查WiFi重置（6秒以上）
+        if (pressDuration >= WIFI_RESET_HOLD_TIME) {
+            Serial.println();
+            Serial.println("=========================================");
+            Serial.println("  WiFi Reset triggered!");
+            Serial.println("  WiFi 重置已触发！");
+            Serial.println("=========================================");
+            Serial.println("  Clearing credentials and restarting...");
+            Serial.println("  正在清除凭据并重启...");
+            
+            // Final feedback: Rainbow effect | 最终反馈：彩虹效果
+            for (int i = 0; i < 10; i++) {
+                uint32_t color = rgbLED.ColorHSV(i * 6553, 255, 255);
+                rgbLED.setPixelColor(0, color);
+                rgbLED.show();
+                delay(50);
+            }
+            
+            ha.clearWiFiCredentials();
+            Serial.flush();
+            delay(500);
+            ESP.restart();
+            // Never reaches here | 永远不会到达这里
+        }
+        
+        // Reset feedback flag | 重置反馈标志
+        wifiResetFeedbackGiven = false;
         
         // Determine press type | 判断按键类型
         if (pressDuration >= LONG_PRESS_MIN_TIME && pressDuration <= LONG_PRESS_MAX_TIME) {
@@ -630,10 +700,16 @@ ButtonEvent detectButtonEventDuringBoot() {
     uint32_t pressStartTime = bootTime;
     uint8_t localClickCount = 0;
     uint32_t localLastReleaseTime = 0;
+    bool wifiResetFeedbackShown = false;
     
     // Maximum time to wait for complete button sequence | 等待完整按键序列的最大时间
-    const uint32_t MAX_DETECTION_TIME = 7000;  // 7 seconds (to allow 6s WiFi reset) | 7秒（允许6秒WiFi重置）
-    const uint32_t WIFI_RESET_HOLD_TIME = 6000;  // 6 seconds to trigger WiFi reset | 6秒触发WiFi重置
+    const uint32_t MAX_DETECTION_TIME = WIFI_RESET_HOLD_TIME + 1000;  // WiFi reset time + 1s buffer | WiFi重置时间 + 1秒缓冲
+    
+    // Initialize LEDs early for feedback | 提前初始化LED用于反馈
+    pinMode(PIN_RED_LED, OUTPUT);
+    pinMode(PIN_BLUE_LED, OUTPUT);
+    digitalWrite(PIN_RED_LED, HIGH);   // Off (inverted) | 关闭（反向逻辑）
+    digitalWrite(PIN_BLUE_LED, HIGH);  // Off (inverted) | 关闭（反向逻辑）
     
     Serial.println("  Waiting for button release (first press)...");
     Serial.println("  (Hold 6+ seconds to reset WiFi)");
@@ -643,39 +719,30 @@ ButtonEvent detectButtonEventDuringBoot() {
         delay(10);
         uint32_t holdTime = millis() - bootTime;
         
-        // Check for WiFi reset (6 seconds hold) | 检测 WiFi 重置（按住 6 秒）
-        if (holdTime >= WIFI_RESET_HOLD_TIME) {
+        // Check for WiFi reset threshold (6 seconds hold) | 检测 WiFi 重置阈值（按住 6 秒）
+        if (holdTime >= WIFI_RESET_HOLD_TIME && !wifiResetFeedbackShown) {
+            wifiResetFeedbackShown = true;
+            
             Serial.println();
             Serial.println("  =========================================");
-            Serial.println("  WiFi Reset triggered! (6 seconds hold)");
-            Serial.println("  WiFi 重置触发！（按住 6 秒）");
+            Serial.println("  WiFi Reset threshold reached! (6 seconds)");
+            Serial.println("  WiFi 重置阈值已达到！（6秒）");
+            Serial.println("  Release button to reset WiFi...");
+            Serial.println("  松开按钮以重置 WiFi...");
             Serial.println("  =========================================");
-            Serial.println("  Clearing credentials and starting AP mode...");
             
-            // We need to initialize WiFi provisioning first to clear credentials
-            // 需要先初始化 WiFi 配网才能清除凭据
-            // This will be handled after setup() completes, so we return a special marker
-            // 这将在 setup() 完成后处理，所以我们返回一个特殊标记
-            
-            // Wait for button release to avoid re-triggering | 等待按钮释放以避免重复触发
-            while (digitalRead(PIN_BUTTON) == LOW) {
-                delay(10);
+            // Visual feedback: Both LEDs blink rapidly | 视觉反馈：双灯快速闪烁
+            for (int i = 0; i < 5; i++) {
+                digitalWrite(PIN_RED_LED, LOW);   // On (inverted)
+                digitalWrite(PIN_BLUE_LED, LOW);  // On (inverted)
+                delay(80);
+                digitalWrite(PIN_RED_LED, HIGH);  // Off (inverted)
+                digitalWrite(PIN_BLUE_LED, HIGH); // Off (inverted)
+                delay(80);
             }
-            
-            // Clear WiFi credentials using Preferences directly
-            // 直接使用 Preferences 清除 WiFi 凭据
-            Preferences wifiPrefs;
-            wifiPrefs.begin("seeed_wifi", false);
-            wifiPrefs.clear();
-            wifiPrefs.end();
-            Serial.println("  WiFi credentials cleared!");
-            Serial.println("  Restarting to enter AP mode...");
-            Serial.flush();
-            delay(500);
-            ESP.restart();
-            
-            // Will never reach here | 永远不会到达这里
-            return BUTTON_NONE;
+            // Keep both LEDs on to indicate ready to reset | 保持双灯亮起指示准备重置
+            digitalWrite(PIN_RED_LED, LOW);
+            digitalWrite(PIN_BLUE_LED, LOW);
         }
         
         // Timeout check | 超时检查
@@ -683,6 +750,32 @@ ButtonEvent detectButtonEventDuringBoot() {
             Serial.println("  Button held too long, timeout");
             return BUTTON_NONE;
         }
+    }
+    
+    // If WiFi reset threshold was reached and button released, trigger reset
+    // 如果达到WiFi重置阈值并释放了按钮，则触发重置
+    if (wifiResetFeedbackShown) {
+        Serial.println();
+        Serial.println("  =========================================");
+        Serial.println("  WiFi Reset triggered!");
+        Serial.println("  WiFi 重置已触发！");
+        Serial.println("  =========================================");
+        Serial.println("  Clearing credentials and restarting...");
+        
+        // Clear WiFi credentials using Preferences directly
+        // 直接使用 Preferences 清除 WiFi 凭据
+        Preferences wifiPrefs;
+        wifiPrefs.begin("seeed_wifi", false);
+        wifiPrefs.clear();
+        wifiPrefs.end();
+        Serial.println("  WiFi credentials cleared!");
+        Serial.println("  Restarting to enter AP mode...");
+        Serial.flush();
+        delay(500);
+        ESP.restart();
+        
+        // Will never reach here | 永远不会到达这里
+        return BUTTON_NONE;
     }
     
     uint32_t firstRelease = millis();
@@ -1505,7 +1598,7 @@ void setup() {
     Serial.println("  - Double click: Toggle Switch 2 + Subtle Flicker (orange)");
     Serial.println("  - Triple click: Dev Mode (3 min sleep timeout)");
     Serial.println("  - Long press (1-5s): Toggle Switch 3 + Rainbow effect");
-    Serial.println("  - Long press (6s+): Reset WiFi and start AP mode");
+    Serial.println("  - Long press (6s+): LED flashes at 6s, release to reset WiFi");
     Serial.println();
 #if USE_WIFI_PROVISIONING
     Serial.println("WiFi Provisioning:");
