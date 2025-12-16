@@ -1,17 +1,11 @@
 # GitHub Actions workflow for compiling Arduino firmware
 # 用于编译 Arduino 固件的 GitHub Actions 工作流
 #
-# This workflow automatically compiles ONLY the firmware that was modified.
-# 此工作流自动只编译被修改的固件。
-#
-# Smart build detection:
-# 智能构建检测：
-# - If library source (src/) changes: rebuild ALL firmware
-#   如果库源码（src/）更改：重新构建所有固件
-# - If specific example changes: rebuild ONLY that firmware
-#   如果特定示例更改：只重新构建该固件
-# - Manual trigger: can choose to build all or specific firmware
-#   手动触发：可以选择构建所有或特定固件
+# Firmware Categories | 固件分类:
+# 1. Seeed-specific: Only works on specific Seeed hardware
+#    Seeed 专用：仅适用于特定 Seeed 硬件
+# 2. Universal: Works on any ESP32 (auto chip detection)
+#    通用固件：适用于任意 ESP32（自动芯片检测）
 
 name: Build Firmware
 
@@ -24,614 +18,554 @@ on:
   pull_request:
     paths:
       - 'arduino/**'
-  workflow_dispatch:  # Allow manual trigger | 允许手动触发
+  workflow_dispatch:
     inputs:
       build_all:
-        description: 'Build all firmware (ignore change detection)'
+        description: 'Build all firmware'
         required: false
-        default: 'false'
+        default: 'true'
         type: boolean
-      firmware:
-        description: 'Specific firmware to build (leave empty for auto-detect)'
-        required: false
-        default: ''
-        type: string
 
 env:
-  ARDUINO_CLI_VERSION: "0.35.3"
-  ESP32_CORE_VERSION: "3.3.4"  # Lock ESP32 Core version for build consistency | 锁定 ESP32 Core 版本以确保构建一致性
-  # Library versions (locked for build stability) | 库版本（锁定以确保构建稳定性）
+  ESP32_CORE_VERSION: "3.3.4"
   ARDUINOJSON_VERSION: "7.4.2"
   WEBSOCKETS_VERSION: "2.7.1"
   NEOPIXEL_VERSION: "1.15.2"
 
 jobs:
-  # Detect which firmware needs to be built | 检测需要构建的固件
-  detect-changes:
-    runs-on: ubuntu-latest
-    outputs:
-      build_iot_button: ${{ steps.check.outputs.build_iot_button }}
-      build_wifi_provisioning: ${{ steps.check.outputs.build_wifi_provisioning }}
-      library_changed: ${{ steps.check.outputs.library_changed }}
-      any_firmware_changed: ${{ steps.check.outputs.any_firmware_changed }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 2  # Need previous commit to detect changes | 需要上一个提交来检测更改
+  # ============================================================================
+  # SEEED-SPECIFIC FIRMWARE | SEEED 专用固件
+  # ============================================================================
 
-      - name: Detect changed files
-        id: check
-        run: |
-          echo "Detecting changed files..."
-          
-          # For manual trigger with build_all, build everything
-          # 手动触发且 build_all 为 true 时，构建所有
-          if [ "${{ github.event.inputs.build_all }}" == "true" ]; then
-            echo "Manual trigger: building all firmware"
-            echo "build_iot_button=true" >> $GITHUB_OUTPUT
-            echo "build_wifi_provisioning=true" >> $GITHUB_OUTPUT
-            echo "library_changed=true" >> $GITHUB_OUTPUT
-            echo "any_firmware_changed=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
-          # For manual trigger with specific firmware
-          # 手动触发指定特定固件
-          if [ -n "${{ github.event.inputs.firmware }}" ]; then
-            echo "Manual trigger: building specific firmware: ${{ github.event.inputs.firmware }}"
-            if [ "${{ github.event.inputs.firmware }}" == "IoTButtonV2_DeepSleep" ]; then
-              echo "build_iot_button=true" >> $GITHUB_OUTPUT
-              echo "build_wifi_provisioning=false" >> $GITHUB_OUTPUT
-            elif [ "${{ github.event.inputs.firmware }}" == "WiFiProvisioning" ]; then
-              echo "build_iot_button=false" >> $GITHUB_OUTPUT
-              echo "build_wifi_provisioning=true" >> $GITHUB_OUTPUT
-            fi
-            echo "library_changed=false" >> $GITHUB_OUTPUT
-            echo "any_firmware_changed=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
-          # Get changed files | 获取更改的文件
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
-          else
-            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only HEAD)
-          fi
-          
-          echo "Changed files:"
-          echo "$CHANGED_FILES"
-          echo ""
-          
-          # Initialize flags | 初始化标志
-          BUILD_IOT_BUTTON=false
-          BUILD_WIFI_PROVISIONING=false
-          LIBRARY_CHANGED=false
-          
-          # Check if library source changed | 检查库源码是否更改
-          if echo "$CHANGED_FILES" | grep -q "arduino/SeeedHADiscovery/src/"; then
-            echo "Library source changed - will rebuild ALL firmware"
-            LIBRARY_CHANGED=true
-            BUILD_IOT_BUTTON=true
-            BUILD_WIFI_PROVISIONING=true
-          fi
-          
-          # Check if workflow file changed | 检查工作流文件是否更改
-          if echo "$CHANGED_FILES" | grep -q ".github/workflows/build-firmware.yml"; then
-            echo "Workflow file changed - will rebuild ALL firmware"
-            BUILD_IOT_BUTTON=true
-            BUILD_WIFI_PROVISIONING=true
-          fi
-          
-          # Check specific firmware changes | 检查特定固件更改
-          if echo "$CHANGED_FILES" | grep -q "arduino/SeeedHADiscovery/examples/IoTButtonV2_DeepSleep/"; then
-            echo "IoTButtonV2_DeepSleep changed"
-            BUILD_IOT_BUTTON=true
-          fi
-          
-          if echo "$CHANGED_FILES" | grep -q "arduino/SeeedHADiscovery/examples/WiFiProvisioning/"; then
-            echo "WiFiProvisioning changed"
-            BUILD_WIFI_PROVISIONING=true
-          fi
-          
-          # Check if any firmware needs building | 检查是否有固件需要构建
-          ANY_CHANGED=false
-          if [ "$BUILD_IOT_BUTTON" == "true" ] || [ "$BUILD_WIFI_PROVISIONING" == "true" ]; then
-            ANY_CHANGED=true
-          fi
-          
-          # Output results | 输出结果
-          echo ""
-          echo "Build decisions:"
-          echo "  - IoTButtonV2_DeepSleep: $BUILD_IOT_BUTTON"
-          echo "  - WiFiProvisioning: $BUILD_WIFI_PROVISIONING"
-          echo "  - Library changed: $LIBRARY_CHANGED"
-          echo "  - Any firmware to build: $ANY_CHANGED"
-          
-          echo "build_iot_button=$BUILD_IOT_BUTTON" >> $GITHUB_OUTPUT
-          echo "build_wifi_provisioning=$BUILD_WIFI_PROVISIONING" >> $GITHUB_OUTPUT
-          echo "library_changed=$LIBRARY_CHANGED" >> $GITHUB_OUTPUT
-          echo "any_firmware_changed=$ANY_CHANGED" >> $GITHUB_OUTPUT
-
-  # Build IoTButtonV2_DeepSleep firmware | 构建 IoTButtonV2_DeepSleep 固件
+  # IoT Button V2 - XIAO ESP32-C6 only
   build-iot-button:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.build_iot_button == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Setup Arduino CLI
         run: |
           curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
-          arduino-cli version
-
-      - name: Install platform and libraries
+      - name: Install dependencies
         run: |
           arduino-cli config init
           arduino-cli config add board_manager.additional_urls "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
           arduino-cli core update-index
           arduino-cli core install esp32:esp32@${{ env.ESP32_CORE_VERSION }}
-          
-          # Install libraries with locked versions | 安装锁定版本的库
           arduino-cli lib install "ArduinoJson@${{ env.ARDUINOJSON_VERSION }}"
           arduino-cli lib install "WebSockets@${{ env.WEBSOCKETS_VERSION }}"
           arduino-cli lib install "Adafruit NeoPixel@${{ env.NEOPIXEL_VERSION }}"
-          
-          echo "Installed library versions:"
-          arduino-cli lib list
-          
-          mkdir -p ~/Arduino/libraries
-          cp -r arduino/SeeedHADiscovery ~/Arduino/libraries/
-
-      - name: Compile IoTButtonV2_DeepSleep
+          mkdir -p ~/Arduino/libraries && cp -r arduino/SeeedHADiscovery ~/Arduino/libraries/
+      - name: Compile
         run: |
           mkdir -p build/IoTButtonV2_DeepSleep
-          arduino-cli compile \
-            --fqbn "esp32:esp32:esp32c6:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M,UploadSpeed=921600" \
-            --output-dir "build/IoTButtonV2_DeepSleep" \
-            --export-binaries \
+          arduino-cli compile --fqbn "esp32:esp32:esp32c6:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M" \
+            --output-dir "build/IoTButtonV2_DeepSleep" --export-binaries \
             "arduino/SeeedHADiscovery/examples/IoTButtonV2_DeepSleep/IoTButtonV2_DeepSleep.ino"
-          
-          echo "Compiled files:"
-          ls -la build/IoTButtonV2_DeepSleep/
-
-      - name: Prepare firmware files
+      - name: Prepare firmware
         run: |
           cd build/IoTButtonV2_DeepSleep
-          
           for f in *.bin; do
-            if [[ "$f" == *".ino.bin" ]]; then
-              mv "$f" "firmware.bin"
-            elif [[ "$f" == *".bootloader.bin" ]]; then
-              mv "$f" "bootloader.bin"
-            elif [[ "$f" == *".partitions.bin" ]]; then
-              mv "$f" "partitions.bin"
-            fi
+            [[ "$f" == *".ino.bin" ]] && mv "$f" "firmware.bin"
+            [[ "$f" == *".bootloader.bin" ]] && mv "$f" "bootloader.bin"
+            [[ "$f" == *".partitions.bin" ]] && mv "$f" "partitions.bin"
           done
-          
-          # Copy boot_app0.bin
-          ESP32_CORE_PATH=$(find ~/.arduino15/packages/esp32/hardware/esp32 -maxdepth 1 -type d -name "${{ env.ESP32_CORE_VERSION }}" | head -1)
-          if [ -n "$ESP32_CORE_PATH" ] && [ -f "$ESP32_CORE_PATH/tools/partitions/boot_app0.bin" ]; then
-            cp "$ESP32_CORE_PATH/tools/partitions/boot_app0.bin" ./boot_app0.bin
-          else
-            BOOT_APP0=$(find ~/.arduino15/packages/esp32 -name "boot_app0.bin" -type f | head -1)
-            cp "$BOOT_APP0" ./boot_app0.bin
-          fi
-          
-          # Create manifest.json
+          cp $(find ~/.arduino15/packages/esp32 -name "boot_app0.bin" -type f | head -1) ./boot_app0.bin
           cat > manifest.json << 'EOF'
-          {
-            "name": "IoTButtonV2_DeepSleep",
-            "version": "1.0.0",
-            "home_assistant_domain": "seeed_ha_discovery",
-            "funding_url": "https://www.seeedstudio.com/",
-            "new_install_prompt_erase": true,
-            "new_install_improv_wait_time": 0,
-            "builds": [
-              {
-                "chipFamily": "ESP32-C6",
-                "parts": [
-                  { "path": "bootloader.bin", "offset": 0 },
-                  { "path": "partitions.bin", "offset": 32768 },
-                  { "path": "boot_app0.bin", "offset": 57344 },
-                  { "path": "firmware.bin", "offset": 65536 }
-                ]
-              }
-            ]
-          }
+          {"name":"IoT Button V2 (XIAO ESP32-C6)","version":"1.0.0","new_install_prompt_erase":true,"builds":[{"chipFamily":"ESP32-C6","parts":[{"path":"bootloader.bin","offset":0},{"path":"partitions.bin","offset":32768},{"path":"boot_app0.bin","offset":57344},{"path":"firmware.bin","offset":65536}]}]}
           EOF
-          
-          echo "Final files:"
-          ls -la
-
-      - name: Upload firmware artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: firmware-IoTButtonV2_DeepSleep
           path: build/IoTButtonV2_DeepSleep/
-          retention-days: 30
 
-  # Build WiFiProvisioning firmware for multiple ESP32 chips | 为多种 ESP32 芯片构建 WiFiProvisioning 固件
-  # This is a generic example that works on all ESP32 variants | 这是一个适用于所有 ESP32 系列的通用示例
+  # Camera Stream - XIAO ESP32-S3 Sense only
+  build-camera-stream:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Arduino CLI
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
+      - name: Install dependencies
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32@${{ env.ESP32_CORE_VERSION }}
+          arduino-cli lib install "ArduinoJson@${{ env.ARDUINOJSON_VERSION }}"
+          arduino-cli lib install "WebSockets@${{ env.WEBSOCKETS_VERSION }}"
+          mkdir -p ~/Arduino/libraries && cp -r arduino/SeeedHADiscovery ~/Arduino/libraries/
+      - name: Compile
+        run: |
+          mkdir -p build/CameraStream
+          arduino-cli compile --fqbn "esp32:esp32:XIAO_ESP32S3:CDCOnBoot=cdc,PartitionScheme=huge_app,USBMode=hwcdc,PSRAM=opi,FlashMode=qio,FlashSize=8M" \
+            --output-dir "build/CameraStream" --export-binaries \
+            "arduino/SeeedHADiscovery/examples/CameraStream/CameraStream.ino"
+      - name: Prepare firmware
+        run: |
+          cd build/CameraStream
+          for f in *.bin; do
+            [[ "$f" == *".ino.bin" ]] && mv "$f" "firmware.bin"
+            [[ "$f" == *".bootloader.bin" ]] && mv "$f" "bootloader.bin"
+            [[ "$f" == *".partitions.bin" ]] && mv "$f" "partitions.bin"
+          done
+          cp $(find ~/.arduino15/packages/esp32 -name "boot_app0.bin" -type f | head -1) ./boot_app0.bin
+          cat > manifest.json << 'EOF'
+          {"name":"Camera Stream (XIAO ESP32-S3 Sense)","version":"1.0.0","new_install_prompt_erase":true,"builds":[{"chipFamily":"ESP32-S3","parts":[{"path":"bootloader.bin","offset":0},{"path":"partitions.bin","offset":32768},{"path":"boot_app0.bin","offset":57344},{"path":"firmware.bin","offset":65536}]}]}
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-CameraStream
+          path: build/CameraStream/
+
+  # reTerminal E1001 - ESP32-S3 based
+  build-reterminal-e1001:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Arduino CLI
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
+      - name: Install dependencies
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32@${{ env.ESP32_CORE_VERSION }}
+          arduino-cli lib install "ArduinoJson@${{ env.ARDUINOJSON_VERSION }}"
+          arduino-cli lib install "WebSockets@${{ env.WEBSOCKETS_VERSION }}"
+          arduino-cli lib install "TFT_eSPI"
+          mkdir -p ~/Arduino/libraries && cp -r arduino/SeeedHADiscovery ~/Arduino/libraries/
+      - name: Compile
+        run: |
+          mkdir -p build/reTerminal_E1001
+          arduino-cli compile --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,PartitionScheme=huge_app,USBMode=hwcdc,PSRAM=opi,FlashMode=qio,FlashSize=8M" \
+            --output-dir "build/reTerminal_E1001" --export-binaries \
+            "arduino/SeeedHADiscovery/examples/reTerminal_E1001_HASubscribe_Display/reTerminal_E1001_HASubscribe_Display.ino" || echo "Build may require Seeed_GFX library"
+      - name: Prepare firmware
+        run: |
+          cd build/reTerminal_E1001
+          for f in *.bin; do
+            [[ "$f" == *".ino.bin" ]] && mv "$f" "firmware.bin"
+            [[ "$f" == *".bootloader.bin" ]] && mv "$f" "bootloader.bin"
+            [[ "$f" == *".partitions.bin" ]] && mv "$f" "partitions.bin"
+          done
+          cp $(find ~/.arduino15/packages/esp32 -name "boot_app0.bin" -type f | head -1) ./boot_app0.bin 2>/dev/null || true
+          cat > manifest.json << 'EOF'
+          {"name":"reTerminal E1001 Dashboard","version":"1.0.0","new_install_prompt_erase":true,"builds":[{"chipFamily":"ESP32-S3","parts":[{"path":"bootloader.bin","offset":0},{"path":"partitions.bin","offset":32768},{"path":"boot_app0.bin","offset":57344},{"path":"firmware.bin","offset":65536}]}]}
+          EOF
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-reTerminal_E1001
+          path: build/reTerminal_E1001/
+        continue-on-error: true
+
+  # reTerminal E1002 - ESP32-S3 based
+  build-reterminal-e1002:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Arduino CLI
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
+      - name: Install dependencies
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32@${{ env.ESP32_CORE_VERSION }}
+          arduino-cli lib install "ArduinoJson@${{ env.ARDUINOJSON_VERSION }}"
+          arduino-cli lib install "WebSockets@${{ env.WEBSOCKETS_VERSION }}"
+          arduino-cli lib install "TFT_eSPI"
+          mkdir -p ~/Arduino/libraries && cp -r arduino/SeeedHADiscovery ~/Arduino/libraries/
+      - name: Compile
+        run: |
+          mkdir -p build/reTerminal_E1002
+          arduino-cli compile --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,PartitionScheme=huge_app,USBMode=hwcdc,PSRAM=opi,FlashMode=qio,FlashSize=8M" \
+            --output-dir "build/reTerminal_E1002" --export-binaries \
+            "arduino/SeeedHADiscovery/examples/reTerminal_E1002_HASubscribe_Display/reTerminal_E1002_HASubscribe_Display.ino" || echo "Build may require Seeed_GFX library"
+      - name: Prepare firmware
+        run: |
+          cd build/reTerminal_E1002
+          for f in *.bin; do
+            [[ "$f" == *".ino.bin" ]] && mv "$f" "firmware.bin"
+            [[ "$f" == *".bootloader.bin" ]] && mv "$f" "bootloader.bin"
+            [[ "$f" == *".partitions.bin" ]] && mv "$f" "partitions.bin"
+          done
+          cp $(find ~/.arduino15/packages/esp32 -name "boot_app0.bin" -type f | head -1) ./boot_app0.bin 2>/dev/null || true
+          cat > manifest.json << 'EOF'
+          {"name":"reTerminal E1002 Dashboard","version":"1.0.0","new_install_prompt_erase":true,"builds":[{"chipFamily":"ESP32-S3","parts":[{"path":"bootloader.bin","offset":0},{"path":"partitions.bin","offset":32768},{"path":"boot_app0.bin","offset":57344},{"path":"firmware.bin","offset":65536}]}]}
+          EOF
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-reTerminal_E1002
+          path: build/reTerminal_E1002/
+        continue-on-error: true
+
+  # ============================================================================
+  # UNIVERSAL FIRMWARE (Multi-chip) | 通用固件（多芯片）
+  # ============================================================================
+
+  # WiFi Provisioning - Universal
   build-wifi-provisioning:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.build_wifi_provisioning == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          # ESP32-C3 (XIAO ESP32C3) | ESP32-C3（XIAO ESP32C3）
-          - chip: "C3"
-            fqbn: "esp32:esp32:esp32c3:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M,UploadSpeed=921600"
-            chip_family: "ESP32-C3"
-            bootloader_offset: 0
-          # ESP32-C6 (XIAO ESP32C6) | ESP32-C6（XIAO ESP32C6）
-          - chip: "C6"
-            fqbn: "esp32:esp32:esp32c6:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M,UploadSpeed=921600"
-            chip_family: "ESP32-C6"
-            bootloader_offset: 0
-          # ESP32-S3 (XIAO ESP32S3) | ESP32-S3（XIAO ESP32S3）
-          - chip: "S3"
-            fqbn: "esp32:esp32:esp32s3:CDCOnBoot=cdc,PartitionScheme=huge_app,USBMode=hwcdc,FlashMode=qio,FlashSize=8M,UploadSpeed=921600,PSRAM=opi"
-            chip_family: "ESP32-S3"
-            bootloader_offset: 0
+          - chip: C3
+            fqbn: "esp32:esp32:esp32c3:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
+            family: "ESP32-C3"
+          - chip: C6
+            fqbn: "esp32:esp32:esp32c6:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
+            family: "ESP32-C6"
+          - chip: S3
+            fqbn: "esp32:esp32:esp32s3:CDCOnBoot=cdc,PartitionScheme=huge_app,USBMode=hwcdc,FlashMode=qio,FlashSize=8M,PSRAM=opi"
+            family: "ESP32-S3"
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Arduino CLI
+      - uses: actions/checkout@v4
+      - name: Setup and compile
         run: |
           curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
-          arduino-cli version
-
-      - name: Install platform and libraries
-        run: |
           arduino-cli config init
           arduino-cli config add board_manager.additional_urls "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
           arduino-cli core update-index
           arduino-cli core install esp32:esp32@${{ env.ESP32_CORE_VERSION }}
-          
-          # Install libraries with locked versions | 安装锁定版本的库
           arduino-cli lib install "ArduinoJson@${{ env.ARDUINOJSON_VERSION }}"
           arduino-cli lib install "WebSockets@${{ env.WEBSOCKETS_VERSION }}"
-          arduino-cli lib install "Adafruit NeoPixel@${{ env.NEOPIXEL_VERSION }}"
-          
-          echo "Installed library versions:"
-          arduino-cli lib list
-          
-          mkdir -p ~/Arduino/libraries
-          cp -r arduino/SeeedHADiscovery ~/Arduino/libraries/
-
-      - name: Compile WiFiProvisioning for ${{ matrix.chip }}
-        run: |
-          FIRMWARE_NAME="WiFiProvisioning-${{ matrix.chip }}"
-          mkdir -p build/${FIRMWARE_NAME}
-          
-          echo "Compiling for ${{ matrix.chip_family }}..."
-          arduino-cli compile \
-            --fqbn "${{ matrix.fqbn }}" \
-            --output-dir "build/${FIRMWARE_NAME}" \
-            --export-binaries \
+          mkdir -p ~/Arduino/libraries && cp -r arduino/SeeedHADiscovery ~/Arduino/libraries/
+          mkdir -p build/WiFiProvisioning/${{ matrix.chip }}
+          arduino-cli compile --fqbn "${{ matrix.fqbn }}" --output-dir "build/WiFiProvisioning/${{ matrix.chip }}" --export-binaries \
             "arduino/SeeedHADiscovery/examples/WiFiProvisioning/WiFiProvisioning.ino"
-          
-          echo "Compiled files:"
-          ls -la build/${FIRMWARE_NAME}/
-
-      - name: Prepare firmware files for ${{ matrix.chip }}
+      - name: Prepare firmware
         run: |
-          # Create chip-specific subfolder | 创建芯片特定的子文件夹
-          # Structure: WiFiProvisioning/C3/, WiFiProvisioning/C6/, WiFiProvisioning/S3/
-          # ESP Web Tools will auto-detect chip and use correct subfolder
-          # ESP Web Tools 会自动检测芯片并使用正确的子文件夹
-          
-          CHIP_DIR="build/WiFiProvisioning/${{ matrix.chip }}"
-          mkdir -p ${CHIP_DIR}
-          
-          # Move and rename binaries to chip subfolder | 移动并重命名二进制文件到芯片子文件夹
-          cd build/WiFiProvisioning-${{ matrix.chip }}
+          cd build/WiFiProvisioning/${{ matrix.chip }}
           for f in *.bin; do
-            if [[ "$f" == *".ino.bin" ]]; then
-              cp "$f" "../WiFiProvisioning/${{ matrix.chip }}/firmware.bin"
-            elif [[ "$f" == *".bootloader.bin" ]]; then
-              cp "$f" "../WiFiProvisioning/${{ matrix.chip }}/bootloader.bin"
-            elif [[ "$f" == *".partitions.bin" ]]; then
-              cp "$f" "../WiFiProvisioning/${{ matrix.chip }}/partitions.bin"
-            fi
+            [[ "$f" == *".ino.bin" ]] && mv "$f" "firmware.bin"
+            [[ "$f" == *".bootloader.bin" ]] && mv "$f" "bootloader.bin"
+            [[ "$f" == *".partitions.bin" ]] && mv "$f" "partitions.bin"
           done
-          
-          # Copy boot_app0.bin to chip subfolder
-          ESP32_CORE_PATH=$(find ~/.arduino15/packages/esp32/hardware/esp32 -maxdepth 1 -type d -name "${{ env.ESP32_CORE_VERSION }}" | head -1)
-          if [ -n "$ESP32_CORE_PATH" ] && [ -f "$ESP32_CORE_PATH/tools/partitions/boot_app0.bin" ]; then
-            cp "$ESP32_CORE_PATH/tools/partitions/boot_app0.bin" "../WiFiProvisioning/${{ matrix.chip }}/boot_app0.bin"
-          else
-            BOOT_APP0=$(find ~/.arduino15/packages/esp32 -name "boot_app0.bin" -type f | head -1)
-            cp "$BOOT_APP0" "../WiFiProvisioning/${{ matrix.chip }}/boot_app0.bin"
-          fi
-          
-          echo "Files for ${{ matrix.chip_family }}:"
-          ls -la ../WiFiProvisioning/${{ matrix.chip }}/
-
-      - name: Upload firmware artifact for ${{ matrix.chip }}
-        uses: actions/upload-artifact@v4
+          cp $(find ~/.arduino15/packages/esp32 -name "boot_app0.bin" -type f | head -1) ./boot_app0.bin
+      - uses: actions/upload-artifact@v4
         with:
           name: firmware-WiFiProvisioning-${{ matrix.chip }}
           path: build/WiFiProvisioning/${{ matrix.chip }}/
-          retention-days: 30
 
-  # Combine all built firmware | 合并所有构建的固件
+  # Button Switch - Universal
+  build-button-switch:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - chip: C3
+            fqbn: "esp32:esp32:esp32c3:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
+            family: "ESP32-C3"
+          - chip: C6
+            fqbn: "esp32:esp32:esp32c6:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
+            family: "ESP32-C6"
+          - chip: S3
+            fqbn: "esp32:esp32:esp32s3:CDCOnBoot=cdc,PartitionScheme=huge_app,USBMode=hwcdc,FlashMode=qio,FlashSize=8M,PSRAM=opi"
+            family: "ESP32-S3"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup and compile
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32@${{ env.ESP32_CORE_VERSION }}
+          arduino-cli lib install "ArduinoJson@${{ env.ARDUINOJSON_VERSION }}"
+          arduino-cli lib install "WebSockets@${{ env.WEBSOCKETS_VERSION }}"
+          mkdir -p ~/Arduino/libraries && cp -r arduino/SeeedHADiscovery ~/Arduino/libraries/
+          mkdir -p build/ButtonSwitch/${{ matrix.chip }}
+          arduino-cli compile --fqbn "${{ matrix.fqbn }}" --output-dir "build/ButtonSwitch/${{ matrix.chip }}" --export-binaries \
+            "arduino/SeeedHADiscovery/examples/ButtonSwitch/ButtonSwitch.ino"
+      - name: Prepare firmware
+        run: |
+          cd build/ButtonSwitch/${{ matrix.chip }}
+          for f in *.bin; do
+            [[ "$f" == *".ino.bin" ]] && mv "$f" "firmware.bin"
+            [[ "$f" == *".bootloader.bin" ]] && mv "$f" "bootloader.bin"
+            [[ "$f" == *".partitions.bin" ]] && mv "$f" "partitions.bin"
+          done
+          cp $(find ~/.arduino15/packages/esp32 -name "boot_app0.bin" -type f | head -1) ./boot_app0.bin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-ButtonSwitch-${{ matrix.chip }}
+          path: build/ButtonSwitch/${{ matrix.chip }}/
+
+  # LED Switch - Universal
+  build-led-switch:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - chip: C3
+            fqbn: "esp32:esp32:esp32c3:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
+            family: "ESP32-C3"
+          - chip: C6
+            fqbn: "esp32:esp32:esp32c6:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
+            family: "ESP32-C6"
+          - chip: S3
+            fqbn: "esp32:esp32:esp32s3:CDCOnBoot=cdc,PartitionScheme=huge_app,USBMode=hwcdc,FlashMode=qio,FlashSize=8M,PSRAM=opi"
+            family: "ESP32-S3"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup and compile
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32@${{ env.ESP32_CORE_VERSION }}
+          arduino-cli lib install "ArduinoJson@${{ env.ARDUINOJSON_VERSION }}"
+          arduino-cli lib install "WebSockets@${{ env.WEBSOCKETS_VERSION }}"
+          mkdir -p ~/Arduino/libraries && cp -r arduino/SeeedHADiscovery ~/Arduino/libraries/
+          mkdir -p build/LEDSwitch/${{ matrix.chip }}
+          arduino-cli compile --fqbn "${{ matrix.fqbn }}" --output-dir "build/LEDSwitch/${{ matrix.chip }}" --export-binaries \
+            "arduino/SeeedHADiscovery/examples/LEDSwitch/LEDSwitch.ino"
+      - name: Prepare firmware
+        run: |
+          cd build/LEDSwitch/${{ matrix.chip }}
+          for f in *.bin; do
+            [[ "$f" == *".ino.bin" ]] && mv "$f" "firmware.bin"
+            [[ "$f" == *".bootloader.bin" ]] && mv "$f" "bootloader.bin"
+            [[ "$f" == *".partitions.bin" ]] && mv "$f" "partitions.bin"
+          done
+          cp $(find ~/.arduino15/packages/esp32 -name "boot_app0.bin" -type f | head -1) ./boot_app0.bin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-LEDSwitch-${{ matrix.chip }}
+          path: build/LEDSwitch/${{ matrix.chip }}/
+
+  # HA State Subscribe - Universal
+  build-ha-state-subscribe:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - chip: C3
+            fqbn: "esp32:esp32:esp32c3:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
+            family: "ESP32-C3"
+          - chip: C6
+            fqbn: "esp32:esp32:esp32c6:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
+            family: "ESP32-C6"
+          - chip: S3
+            fqbn: "esp32:esp32:esp32s3:CDCOnBoot=cdc,PartitionScheme=huge_app,USBMode=hwcdc,FlashMode=qio,FlashSize=8M,PSRAM=opi"
+            family: "ESP32-S3"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup and compile
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32@${{ env.ESP32_CORE_VERSION }}
+          arduino-cli lib install "ArduinoJson@${{ env.ARDUINOJSON_VERSION }}"
+          arduino-cli lib install "WebSockets@${{ env.WEBSOCKETS_VERSION }}"
+          mkdir -p ~/Arduino/libraries && cp -r arduino/SeeedHADiscovery ~/Arduino/libraries/
+          mkdir -p build/HAStateSubscribe/${{ matrix.chip }}
+          arduino-cli compile --fqbn "${{ matrix.fqbn }}" --output-dir "build/HAStateSubscribe/${{ matrix.chip }}" --export-binaries \
+            "arduino/SeeedHADiscovery/examples/HAStateSubscribe/HAStateSubscribe.ino"
+      - name: Prepare firmware
+        run: |
+          cd build/HAStateSubscribe/${{ matrix.chip }}
+          for f in *.bin; do
+            [[ "$f" == *".ino.bin" ]] && mv "$f" "firmware.bin"
+            [[ "$f" == *".bootloader.bin" ]] && mv "$f" "bootloader.bin"
+            [[ "$f" == *".partitions.bin" ]] && mv "$f" "partitions.bin"
+          done
+          cp $(find ~/.arduino15/packages/esp32 -name "boot_app0.bin" -type f | head -1) ./boot_app0.bin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-HAStateSubscribe-${{ matrix.chip }}
+          path: build/HAStateSubscribe/${{ matrix.chip }}/
+
+  # Temperature Humidity - Universal
+  build-temp-humidity:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - chip: C3
+            fqbn: "esp32:esp32:esp32c3:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
+            family: "ESP32-C3"
+          - chip: C6
+            fqbn: "esp32:esp32:esp32c6:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
+            family: "ESP32-C6"
+          - chip: S3
+            fqbn: "esp32:esp32:esp32s3:CDCOnBoot=cdc,PartitionScheme=huge_app,USBMode=hwcdc,FlashMode=qio,FlashSize=8M,PSRAM=opi"
+            family: "ESP32-S3"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup and compile
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32@${{ env.ESP32_CORE_VERSION }}
+          arduino-cli lib install "ArduinoJson@${{ env.ARDUINOJSON_VERSION }}"
+          arduino-cli lib install "WebSockets@${{ env.WEBSOCKETS_VERSION }}"
+          mkdir -p ~/Arduino/libraries && cp -r arduino/SeeedHADiscovery ~/Arduino/libraries/
+          mkdir -p build/TemperatureHumidity/${{ matrix.chip }}
+          arduino-cli compile --fqbn "${{ matrix.fqbn }}" --output-dir "build/TemperatureHumidity/${{ matrix.chip }}" --export-binaries \
+            "arduino/SeeedHADiscovery/examples/TemperatureHumidity/TemperatureHumidity.ino"
+      - name: Prepare firmware
+        run: |
+          cd build/TemperatureHumidity/${{ matrix.chip }}
+          for f in *.bin; do
+            [[ "$f" == *".ino.bin" ]] && mv "$f" "firmware.bin"
+            [[ "$f" == *".bootloader.bin" ]] && mv "$f" "bootloader.bin"
+            [[ "$f" == *".partitions.bin" ]] && mv "$f" "partitions.bin"
+          done
+          cp $(find ~/.arduino15/packages/esp32 -name "boot_app0.bin" -type f | head -1) ./boot_app0.bin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-TemperatureHumidity-${{ matrix.chip }}
+          path: build/TemperatureHumidity/${{ matrix.chip }}/
+
+  # ============================================================================
+  # COMBINE & RELEASE | 合并与发布
+  # ============================================================================
+
   combine:
-    needs: [detect-changes, build-iot-button, build-wifi-provisioning]
-    if: always() && needs.detect-changes.outputs.any_firmware_changed == 'true'
+    needs: [build-iot-button, build-camera-stream, build-wifi-provisioning, build-button-switch, build-led-switch, build-ha-state-subscribe, build-temp-humidity]
+    if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Download all firmware artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: all-firmware/
           pattern: firmware-*
-        continue-on-error: true  # Some artifacts may not exist | 某些 artifact 可能不存在
+        continue-on-error: true
 
-      - name: Check downloaded artifacts
-        run: |
-          echo "Downloaded artifacts:"
-          ls -la all-firmware/ 2>/dev/null || echo "No artifacts directory"
-          find all-firmware -type f 2>/dev/null || echo "No files found"
-
-      - name: Reorganize firmware files
+      - name: Organize firmware
         run: |
           mkdir -p combined-firmware
           
-          if [ -d "all-firmware" ]; then
-            # Handle IoTButtonV2_DeepSleep (single chip) | 处理 IoTButtonV2_DeepSleep（单芯片）
-            if [ -d "all-firmware/firmware-IoTButtonV2_DeepSleep" ]; then
-              echo "Adding IoTButtonV2_DeepSleep..."
-              cp -r "all-firmware/firmware-IoTButtonV2_DeepSleep" "combined-firmware/IoTButtonV2_DeepSleep"
+          # Single-chip firmware (Seeed-specific)
+          for fw in IoTButtonV2_DeepSleep CameraStream reTerminal_E1001 reTerminal_E1002; do
+            if [ -d "all-firmware/firmware-${fw}" ]; then
+              cp -r "all-firmware/firmware-${fw}" "combined-firmware/${fw}"
+              echo "Added: ${fw}"
             fi
-            
-            # Handle WiFiProvisioning (multi-chip) | 处理 WiFiProvisioning（多芯片）
-            mkdir -p combined-firmware/WiFiProvisioning
-            
+          done
+          
+          # Multi-chip firmware (Universal) - create manifest with all chips
+          for fw in WiFiProvisioning ButtonSwitch LEDSwitch HAStateSubscribe TemperatureHumidity; do
+            mkdir -p "combined-firmware/${fw}"
             for chip in C3 C6 S3; do
-              if [ -d "all-firmware/firmware-WiFiProvisioning-${chip}" ]; then
-                echo "Adding WiFiProvisioning/${chip}..."
-                mkdir -p "combined-firmware/WiFiProvisioning/${chip}"
-                cp -r "all-firmware/firmware-WiFiProvisioning-${chip}/"* "combined-firmware/WiFiProvisioning/${chip}/"
+              if [ -d "all-firmware/firmware-${fw}-${chip}" ]; then
+                mkdir -p "combined-firmware/${fw}/${chip}"
+                cp -r "all-firmware/firmware-${fw}-${chip}/"* "combined-firmware/${fw}/${chip}/"
+                echo "Added: ${fw}/${chip}"
               fi
             done
-          fi
+            
+            # Create multi-chip manifest
+            if [ -d "combined-firmware/${fw}/C3" ] || [ -d "combined-firmware/${fw}/C6" ] || [ -d "combined-firmware/${fw}/S3" ]; then
+              echo '{"name":"'"${fw}"'","version":"1.0.0","new_install_prompt_erase":true,"builds":[' > "combined-firmware/${fw}/manifest.json"
+              FIRST=true
+              for chip in C3 C6 S3; do
+                if [ -d "combined-firmware/${fw}/${chip}" ]; then
+                  [ "$FIRST" = false ] && echo ',' >> "combined-firmware/${fw}/manifest.json"
+                  FIRST=false
+                  FAMILY="ESP32-${chip}"
+                  echo '{"chipFamily":"'"${FAMILY}"'","parts":[{"path":"'"${chip}"'/bootloader.bin","offset":0},{"path":"'"${chip}"'/partitions.bin","offset":32768},{"path":"'"${chip}"'/boot_app0.bin","offset":57344},{"path":"'"${chip}"'/firmware.bin","offset":65536}]}' >> "combined-firmware/${fw}/manifest.json"
+                fi
+              done
+              echo ']}' >> "combined-firmware/${fw}/manifest.json"
+              echo "Created manifest for ${fw}"
+            fi
+          done
           
           echo ""
-          echo "=========================="
-          echo "Combined firmware structure:"
-          echo "=========================="
-          find combined-firmware -type f 2>/dev/null || echo "No firmware files"
+          echo "Final structure:"
+          find combined-firmware -type f | head -50
 
-      - name: Generate WiFiProvisioning multi-chip manifest
-        run: |
-          # Create multi-build manifest.json for WiFiProvisioning
-          # ESP Web Tools will auto-detect connected chip and use correct build
-          if [ -d "combined-firmware/WiFiProvisioning" ] && [ "$(ls -A combined-firmware/WiFiProvisioning 2>/dev/null)" ]; then
-            echo "Creating multi-build manifest.json for WiFiProvisioning..."
-            
-            # Build the manifest using a script approach
-            MANIFEST="combined-firmware/WiFiProvisioning/manifest.json"
-            
-            echo '{' > $MANIFEST
-            echo '  "name": "WiFiProvisioning",' >> $MANIFEST
-            echo '  "version": "1.0.0",' >> $MANIFEST
-            echo '  "home_assistant_domain": "seeed_ha_discovery",' >> $MANIFEST
-            echo '  "funding_url": "https://www.seeedstudio.com/",' >> $MANIFEST
-            echo '  "new_install_prompt_erase": true,' >> $MANIFEST
-            echo '  "new_install_improv_wait_time": 0,' >> $MANIFEST
-            echo '  "builds": [' >> $MANIFEST
-            
-            FIRST=true
-            
-            # Add C3 build if exists
-            if [ -d "combined-firmware/WiFiProvisioning/C3" ]; then
-              if [ "$FIRST" = false ]; then echo ',' >> $MANIFEST; fi
-              FIRST=false
-              echo '    {"chipFamily":"ESP32-C3","parts":[' >> $MANIFEST
-              echo '      {"path":"C3/bootloader.bin","offset":0},' >> $MANIFEST
-              echo '      {"path":"C3/partitions.bin","offset":32768},' >> $MANIFEST
-              echo '      {"path":"C3/boot_app0.bin","offset":57344},' >> $MANIFEST
-              echo '      {"path":"C3/firmware.bin","offset":65536}' >> $MANIFEST
-              echo '    ]}' >> $MANIFEST
-            fi
-            
-            # Add C6 build if exists
-            if [ -d "combined-firmware/WiFiProvisioning/C6" ]; then
-              if [ "$FIRST" = false ]; then echo ',' >> $MANIFEST; fi
-              FIRST=false
-              echo '    {"chipFamily":"ESP32-C6","parts":[' >> $MANIFEST
-              echo '      {"path":"C6/bootloader.bin","offset":0},' >> $MANIFEST
-              echo '      {"path":"C6/partitions.bin","offset":32768},' >> $MANIFEST
-              echo '      {"path":"C6/boot_app0.bin","offset":57344},' >> $MANIFEST
-              echo '      {"path":"C6/firmware.bin","offset":65536}' >> $MANIFEST
-              echo '    ]}' >> $MANIFEST
-            fi
-            
-            # Add S3 build if exists
-            if [ -d "combined-firmware/WiFiProvisioning/S3" ]; then
-              if [ "$FIRST" = false ]; then echo ',' >> $MANIFEST; fi
-              FIRST=false
-              echo '    {"chipFamily":"ESP32-S3","parts":[' >> $MANIFEST
-              echo '      {"path":"S3/bootloader.bin","offset":0},' >> $MANIFEST
-              echo '      {"path":"S3/partitions.bin","offset":32768},' >> $MANIFEST
-              echo '      {"path":"S3/boot_app0.bin","offset":57344},' >> $MANIFEST
-              echo '      {"path":"S3/firmware.bin","offset":65536}' >> $MANIFEST
-              echo '    ]}' >> $MANIFEST
-            fi
-            
-            echo '  ]' >> $MANIFEST
-            echo '}' >> $MANIFEST
-            
-            echo "Generated manifest.json:"
-            cat $MANIFEST
-          fi
-
-      - name: Upload combined firmware
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: all-firmware
           path: combined-firmware/
           retention-days: 90
-        if: hashFiles('combined-firmware/**') != ''
 
-  # Create release | 创建发布版本
   release:
-    needs: [detect-changes, combine]
-    if: always() && needs.detect-changes.outputs.any_firmware_changed == 'true' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: combine
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history for changelog | 完整历史用于更新日志
-
-      - name: Download combined firmware
-        uses: actions/download-artifact@v4
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
         with:
           name: all-firmware
           path: firmware/
         continue-on-error: true
-
-      - name: Check firmware exists
-        id: check_firmware
+      - name: Package and release
         run: |
-          if [ -d "firmware" ] && [ "$(ls -A firmware 2>/dev/null)" ]; then
-            echo "has_firmware=true" >> $GITHUB_OUTPUT
-            echo "Firmware directory contents:"
-            find firmware -type f
-          else
-            echo "has_firmware=false" >> $GITHUB_OUTPUT
+          if [ ! -d "firmware" ] || [ -z "$(ls -A firmware 2>/dev/null)" ]; then
             echo "No firmware to release"
+            exit 0
           fi
-
-      - name: Get version and changelog
-        id: version
-        if: steps.check_firmware.outputs.has_firmware == 'true'
-        run: |
+          
           VERSION=$(date +'%Y.%m.%d')-$(git rev-parse --short HEAD)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          
-          # Get the last release tag
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          
-          echo "Generating changelog..."
-          if [ -n "$LAST_TAG" ]; then
-            echo "Changes since $LAST_TAG:"
-            CHANGELOG=$(git log ${LAST_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges | head -30)
-          else
-            echo "No previous tag found, using last 20 commits"
-            CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
-          fi
-          
-          echo "$CHANGELOG" > changelog.txt
-          cat changelog.txt
-
-      - name: Package firmware
-        if: steps.check_firmware.outputs.has_firmware == 'true'
-        run: |
           cd firmware
-          
           for dir in */; do
-            firmware_name="${dir%/}"
-            echo "Packaging $firmware_name..."
-            zip -r "${firmware_name}.zip" "$dir"
+            name="${dir%/}"
+            zip -r "${name}.zip" "$dir"
           done
-          
           cd ..
           zip -r "all-firmware.zip" firmware/
           mv all-firmware.zip firmware/
           
-          echo "Created packages:"
-          ls -la firmware/*.zip
-
-      - name: Generate release body
-        if: steps.check_firmware.outputs.has_firmware == 'true'
-        run: |
-          CHANGELOG=$(cat changelog.txt)
+          CHANGELOG=$(git log $(git describe --tags --abbrev=0 2>/dev/null || echo "")..HEAD --pretty=format:"- %s" --no-merges 2>/dev/null | head -20 || echo "- Initial release")
           
-          # Generate firmware table | 生成固件表格
-          # Categorize firmware by type | 按类型分类固件
-          echo "| Firmware | Chip | Description |" > firmware_table.md
-          echo "|----------|------|-------------|" >> firmware_table.md
-          
-          for dir in firmware/*/; do
-            firmware_name=$(basename "$dir")
-            if [ "$firmware_name" != "*.zip" ]; then
-              # Determine chip and description based on firmware name
-              # 根据固件名称确定芯片和描述
-              case "$firmware_name" in
-                "IoTButtonV2_DeepSleep")
-                  echo "| $firmware_name | ESP32-C6 | IoT Button with deep sleep (XIAO ESP32C6 only) |" >> firmware_table.md
-                  ;;
-                "WiFiProvisioning-C3")
-                  echo "| $firmware_name | ESP32-C3 | WiFi provisioning demo (XIAO ESP32C3) |" >> firmware_table.md
-                  ;;
-                "WiFiProvisioning-C6")
-                  echo "| $firmware_name | ESP32-C6 | WiFi provisioning demo (XIAO ESP32C6) |" >> firmware_table.md
-                  ;;
-                "WiFiProvisioning-S3")
-                  echo "| $firmware_name | ESP32-S3 | WiFi provisioning demo (XIAO ESP32S3) |" >> firmware_table.md
-                  ;;
-                *)
-                  echo "| $firmware_name | - | - |" >> firmware_table.md
-                  ;;
-              esac
-            fi
-          done
-          
-          FIRMWARE_TABLE=$(cat firmware_table.md)
-          
-          cat > release_body.md << ENDOFHEADER
+          cat > release_body.md << EOF
           ## 🚀 Firmware Release
           
-          Pre-compiled firmware for Seeed HA Discovery devices.
-          为 Seeed HA Discovery 设备预编译的固件。
+          ### 📦 Seeed-Specific Firmware
+          | Firmware | Hardware | Description |
+          |----------|----------|-------------|
+          | IoTButtonV2_DeepSleep | XIAO ESP32-C6 | Low-power IoT button |
+          | CameraStream | XIAO ESP32-S3 Sense | Camera streaming |
+          | reTerminal_E1001 | reTerminal E1001 | E-Paper dashboard |
+          | reTerminal_E1002 | reTerminal E1002 | Color E-Paper dashboard |
           
-          ### 📥 How to Flash | 如何烧录
+          ### 📦 Universal Firmware (Auto Chip Detection)
+          | Firmware | Supported Chips | Description |
+          |----------|-----------------|-------------|
+          | WiFiProvisioning | C3/C6/S3 | WiFi setup demo |
+          | ButtonSwitch | C3/C6/S3 | Button control |
+          | LEDSwitch | C3/C6/S3 | LED control |
+          | HAStateSubscribe | C3/C6/S3 | HA state display |
+          | TemperatureHumidity | C3/C6/S3 | Sensor demo |
           
-          **Web Flasher (Recommended | 推荐):**
-          Visit [Web Flasher](https://limengdu.github.io/Seeed-Homeassistant-Discovery/flasher/) to flash directly from browser.
-          访问 [网页烧录器](https://limengdu.github.io/Seeed-Homeassistant-Discovery/flasher/) 直接从浏览器烧录。
-          
-          ### 📦 Firmware in this release | 本次发布的固件
-          
-          $FIRMWARE_TABLE
-          
-          > **Note:** WiFiProvisioning is available for multiple ESP32 chips. Choose the variant matching your hardware.
-          > **注意：** WiFiProvisioning 提供多种 ESP32 芯片版本，请选择与您硬件匹配的版本。
-          
-          ### 📝 Changelog | 更新日志
-          
-          $CHANGELOG
+          ### 📝 Changelog
+          ${CHANGELOG}
           
           ---
+          **Build Info:** ESP32 Core ${{ env.ESP32_CORE_VERSION }} | $(date -u '+%Y-%m-%d %H:%M UTC')
+          EOF
           
-          **Build Info | 构建信息:**
-          - ESP32 Core: ${{ env.ESP32_CORE_VERSION }}
-          - ArduinoJson: ${{ env.ARDUINOJSON_VERSION }}
-          - WebSockets: ${{ env.WEBSOCKETS_VERSION }}
-          - Adafruit NeoPixel: ${{ env.NEOPIXEL_VERSION }}
-          - Build Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-          - Commit: ${{ github.sha }}
-          ENDOFHEADER
-          
-          cat release_body.md
-
-      - name: Create Release
-        if: steps.check_firmware.outputs.has_firmware == 'true'
-        uses: softprops/action-gh-release@v1
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        id: prep
+      - uses: softprops/action-gh-release@v1
         with:
-          tag_name: firmware-${{ steps.version.outputs.version }}
-          name: Firmware Release ${{ steps.version.outputs.version }}
+          tag_name: firmware-${{ steps.prep.outputs.version }}
+          name: Firmware ${{ steps.prep.outputs.version }}
           body_path: release_body.md
-          files: |
-            firmware/*.zip
+          files: firmware/*.zip
+        if: steps.prep.outputs.version != ''

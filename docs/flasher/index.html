@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Seeed HA Discovery - Web Flasher | 网页固件烧录器</title>
     
-    <!-- ESP Web Tools | ESP 网页烧录工具 -->
     <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
     
     <style>
@@ -23,18 +22,14 @@
             --accent-blue: #39bae6;
             --accent-blue-dim: rgba(57, 186, 230, 0.15);
             --accent-purple: #c882ff;
+            --accent-purple-dim: rgba(200, 130, 255, 0.15);
             --text-primary: #e6e6e6;
             --text-secondary: #8b949e;
             --text-muted: #5c6773;
             --border-color: rgba(255, 255, 255, 0.08);
-            --shadow-glow: 0 0 40px rgba(61, 214, 140, 0.1);
         }
         
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         
         body {
             font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -44,77 +39,41 @@
             line-height: 1.6;
         }
         
-        /* Background pattern */
         body::before {
             content: '';
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
+            top: 0; left: 0; right: 0; bottom: 0;
             background: 
                 radial-gradient(circle at 20% 20%, rgba(61, 214, 140, 0.05) 0%, transparent 50%),
-                radial-gradient(circle at 80% 80%, rgba(57, 186, 230, 0.05) 0%, transparent 50%),
-                linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.3) 100%);
+                radial-gradient(circle at 80% 80%, rgba(57, 186, 230, 0.05) 0%, transparent 50%);
             pointer-events: none;
             z-index: -1;
         }
         
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 2rem; }
         
-        /* Header */
-        header {
-            text-align: center;
-            padding: 3rem 0;
-            margin-bottom: 2rem;
-        }
+        header { text-align: center; padding: 2rem 0; margin-bottom: 1rem; }
         
-        .logo {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
+        .logo { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-bottom: 1rem; }
         
         .logo-icon {
-            width: 60px;
-            height: 60px;
+            width: 60px; height: 60px;
             background: linear-gradient(135deg, var(--accent-green), var(--accent-blue));
             border-radius: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: flex; align-items: center; justify-content: center;
             font-size: 2rem;
-            box-shadow: var(--shadow-glow);
         }
         
         h1 {
-            font-size: 2.5rem;
-            font-weight: 700;
+            font-size: 2.5rem; font-weight: 700;
             background: linear-gradient(135deg, var(--accent-green), var(--accent-blue));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
             background-clip: text;
         }
         
-        .subtitle {
-            color: var(--text-secondary);
-            font-size: 1.1rem;
-            margin-top: 0.5rem;
-        }
+        .subtitle { color: var(--text-secondary); font-size: 1.1rem; }
         
-        /* Language toggle */
-        .lang-toggle {
-            display: flex;
-            justify-content: center;
-            gap: 0.5rem;
-            margin-top: 1.5rem;
-        }
+        .lang-toggle { display: flex; justify-content: center; gap: 0.5rem; margin-top: 1rem; }
         
         .lang-btn {
             padding: 0.5rem 1rem;
@@ -127,69 +86,60 @@
             font-family: inherit;
         }
         
-        .lang-btn:hover,
-        .lang-btn.active {
+        .lang-btn:hover, .lang-btn.active {
             background: var(--accent-green-dim);
             border-color: var(--accent-green);
             color: var(--accent-green);
         }
         
-        /* Instructions */
-        .instructions {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 16px;
-            padding: 2rem;
+        /* Section styles */
+        .section {
             margin-bottom: 3rem;
         }
         
-        .instructions h2 {
-            color: var(--accent-orange);
-            font-size: 1.3rem;
-            margin-bottom: 1rem;
+        .section-header {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 2px solid var(--border-color);
         }
         
-        .instructions ol {
-            color: var(--text-secondary);
-            padding-left: 1.5rem;
+        .section-icon {
+            width: 40px; height: 40px;
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.3rem;
         }
         
-        .instructions li {
-            margin-bottom: 0.8rem;
+        .section-seeed .section-icon { background: var(--accent-orange-dim); }
+        .section-universal .section-icon { background: var(--accent-purple-dim); }
+        
+        .section-title {
+            font-size: 1.4rem;
+            font-weight: 600;
         }
         
-        .instructions code {
-            background: var(--bg-primary);
-            padding: 0.2rem 0.5rem;
-            border-radius: 4px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.9rem;
-            color: var(--accent-green);
-        }
+        .section-seeed .section-title { color: var(--accent-orange); }
+        .section-universal .section-title { color: var(--accent-purple); }
         
-        .warning {
-            background: var(--accent-orange-dim);
-            border: 1px solid var(--accent-orange);
+        .section-hint {
+            margin-left: auto;
+            background: var(--bg-card);
+            padding: 0.5rem 1rem;
             border-radius: 8px;
-            padding: 1rem;
-            margin-top: 1rem;
-            color: var(--accent-orange);
-            font-size: 0.9rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
         }
+        
+        .section-hint strong { color: var(--accent-green); }
         
         /* Firmware grid */
-        .firmware-section h2 {
-            font-size: 1.5rem;
-            margin-bottom: 1.5rem;
-            color: var(--text-primary);
-        }
-        
         .firmware-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
             gap: 1.5rem;
         }
         
@@ -201,30 +151,12 @@
             padding: 1.5rem;
             transition: all 0.3s ease;
             position: relative;
-            overflow: hidden;
         }
         
         .firmware-card:hover {
             background: var(--bg-card-hover);
             border-color: var(--accent-green);
             transform: translateY(-2px);
-            box-shadow: var(--shadow-glow);
-        }
-        
-        .firmware-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, var(--accent-green), var(--accent-blue));
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-        
-        .firmware-card:hover::before {
-            opacity: 1;
         }
         
         .card-header {
@@ -235,37 +167,41 @@
         }
         
         .card-icon {
-            width: 48px;
-            height: 48px;
+            width: 48px; height: 48px;
             background: var(--accent-green-dim);
             border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: flex; align-items: center; justify-content: center;
             font-size: 1.5rem;
             flex-shrink: 0;
         }
         
-        .card-title {
-            font-size: 1.2rem;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 0.25rem;
+        .card-title { font-size: 1.1rem; font-weight: 600; color: var(--text-primary); }
+        
+        .card-chips {
+            display: flex;
+            gap: 0.3rem;
+            flex-wrap: wrap;
+            margin-top: 0.25rem;
         }
         
         .card-chip {
             display: inline-block;
             background: var(--accent-blue-dim);
             color: var(--accent-blue);
-            padding: 0.2rem 0.6rem;
+            padding: 0.15rem 0.5rem;
             border-radius: 4px;
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .card-chip.seeed {
+            background: var(--accent-orange-dim);
+            color: var(--accent-orange);
         }
         
         .card-description {
             color: var(--text-secondary);
-            font-size: 0.95rem;
+            font-size: 0.9rem;
             margin-bottom: 1rem;
             line-height: 1.5;
         }
@@ -282,30 +218,40 @@
             color: var(--text-muted);
             padding: 0.25rem 0.6rem;
             border-radius: 4px;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
         }
         
-        /* ESP Web Tools button styling */
-        esp-web-install-button {
-            display: block;
+        /* Auto-detect badge */
+        .auto-detect-badge {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: var(--accent-purple-dim);
+            color: var(--accent-purple);
+            padding: 0.25rem 0.5rem;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
         }
         
-        /* Style the custom slot button | 自定义 slot 按钮样式 */
+        /* ESP Web Tools button */
+        esp-web-install-button { display: block; }
+        
         esp-web-install-button button[slot="activate"] {
             width: 100%;
-            padding: 1rem 1.5rem;
+            padding: 0.875rem 1.5rem;
             background: linear-gradient(135deg, var(--accent-green), #2ab573);
             border: none;
-            border-radius: 12px;
+            border-radius: 10px;
             color: var(--bg-primary);
             font-family: 'Outfit', sans-serif;
-            font-size: 1rem;
+            font-size: 0.95rem;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-            box-shadow: 0 4px 15px rgba(61, 214, 140, 0.3);
         }
         
         esp-web-install-button button[slot="activate"]::before {
@@ -315,140 +261,69 @@
         
         esp-web-install-button button[slot="activate"]:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 25px rgba(61, 214, 140, 0.5);
-            background: linear-gradient(135deg, #4de8a0, var(--accent-green));
+            box-shadow: 0 6px 20px rgba(61, 214, 140, 0.4);
         }
         
-        esp-web-install-button button[slot="activate"]:active {
-            transform: translateY(0);
-            box-shadow: 0 2px 10px rgba(61, 214, 140, 0.3);
-        }
-        
-        /* Fallback for default part button | 默认 part 按钮的回退样式 */
-        esp-web-install-button::part(button) {
-            width: 100%;
-            padding: 1rem 1.5rem;
-            background: linear-gradient(135deg, var(--accent-green), #2ab573);
-            border: none;
-            border-radius: 12px;
-            color: var(--bg-primary);
-            font-family: 'Outfit', sans-serif;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(61, 214, 140, 0.3);
-        }
-        
-        esp-web-install-button::part(button):hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 25px rgba(61, 214, 140, 0.5);
-        }
-        
-        esp-web-install-button[install-unsupported] button[slot="activate"],
-        esp-web-install-button[install-unsupported]::part(button) {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            color: var(--text-muted);
-            cursor: not-allowed;
-            box-shadow: none;
-        }
-        
-        esp-web-install-button[install-unsupported] button[slot="activate"]:hover,
-        esp-web-install-button[install-unsupported]::part(button):hover {
-            transform: none;
-            box-shadow: none;
-        }
-        
-        esp-web-install-button[install-unsupported] button[slot="activate"]::before {
-            content: '⚠️';
-        }
-        
-        /* Coming Soon / Disabled button | 即将推出/禁用按钮 */
-        .btn-coming-soon {
-            width: 100%;
-            padding: 1rem 1.5rem;
-            background: var(--bg-card);
-            border: 1px dashed var(--border-color);
-            border-radius: 12px;
-            color: var(--text-muted);
-            font-family: 'Outfit', sans-serif;
-            font-size: 1rem;
-            font-weight: 500;
-            cursor: not-allowed;
-            transition: all 0.3s ease;
-            position: relative;
-        }
-        
-        .btn-coming-soon::before {
-            content: '🚧';
-            margin-right: 0.5rem;
-        }
-        
-        .btn-coming-soon:hover {
-            border-color: var(--accent-orange);
-            color: var(--accent-orange);
-        }
-        
-        /* Unsupported browser message */
         .unsupported {
             display: none;
             background: rgba(255, 100, 100, 0.1);
             border: 1px solid rgba(255, 100, 100, 0.3);
             border-radius: 8px;
-            padding: 1rem;
+            padding: 0.75rem;
             text-align: center;
             color: #ff6b6b;
+            font-size: 0.85rem;
         }
         
-        esp-web-install-button[install-unsupported] + .unsupported {
-            display: block;
+        esp-web-install-button[install-unsupported] + .unsupported { display: block; }
+        
+        /* Instructions */
+        .instructions {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
         }
         
-        /* Footer */
+        .instructions h2 {
+            color: var(--accent-green);
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+        }
+        
+        .instructions ol {
+            color: var(--text-secondary);
+            padding-left: 1.5rem;
+        }
+        
+        .instructions li { margin-bottom: 0.5rem; }
+        
+        .warning {
+            background: var(--accent-orange-dim);
+            border: 1px solid var(--accent-orange);
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-top: 1rem;
+            color: var(--accent-orange);
+            font-size: 0.85rem;
+        }
+        
         footer {
             text-align: center;
-            padding: 3rem 0;
+            padding: 2rem 0;
             color: var(--text-muted);
             font-size: 0.9rem;
         }
         
-        footer a {
-            color: var(--accent-green);
-            text-decoration: none;
-        }
+        footer a { color: var(--accent-green); text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
         
-        footer a:hover {
-            text-decoration: underline;
-        }
-        
-        /* Responsive */
         @media (max-width: 768px) {
-            .container {
-                padding: 1rem;
-            }
-            
-            h1 {
-                font-size: 1.8rem;
-            }
-            
-            .firmware-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .instructions {
-                padding: 1.5rem;
-            }
-        }
-        
-        /* Animation */
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
-        }
-        
-        .loading {
-            animation: pulse 1.5s ease-in-out infinite;
+            .container { padding: 1rem; }
+            h1 { font-size: 1.8rem; }
+            .firmware-grid { grid-template-columns: 1fr; }
+            .section-hint { display: none; }
         }
     </style>
 </head>
@@ -468,32 +343,25 @@
         </header>
         
         <section class="instructions">
-            <h2>📋 <span data-en="Instructions" data-zh="使用说明">Instructions</span></h2>
+            <h2>📋 <span data-en="Quick Start" data-zh="快速开始">Quick Start</span></h2>
             <ol>
-                <li data-en="Connect your device to your computer via USB" data-zh="通过 USB 将设备连接到电脑">
-                    Connect your device to your computer via USB
-                </li>
-                <li data-en="Click the 'Install' button on the firmware card below" data-zh="点击下方固件卡片上的"安装"按钮">
-                    Click the "Install" button on the firmware card below
-                </li>
-                <li data-en="Select the correct serial port (usually contains 'USB' or 'UART')" data-zh="选择正确的串口（通常包含 'USB' 或 'UART'）">
-                    Select the correct serial port (usually contains "USB" or "UART")
-                </li>
-                <li data-en="Wait for the flashing process to complete" data-zh="等待烧录过程完成">
-                    Wait for the flashing process to complete
-                </li>
+                <li data-en="Connect your device via USB" data-zh="通过 USB 连接设备">Connect your device via USB</li>
+                <li data-en="Click 'Install' on the firmware card" data-zh="点击固件卡片上的"安装"">Click "Install" on the firmware card</li>
+                <li data-en="Select the correct serial port" data-zh="选择正确的串口">Select the correct serial port</li>
+                <li data-en="Wait for flashing to complete" data-zh="等待烧录完成">Wait for flashing to complete</li>
             </ol>
-            
             <div class="warning">
-                <strong data-en="⚠️ Browser Requirement:" data-zh="⚠️ 浏览器要求：">⚠️ Browser Requirement:</strong>
-                <span data-en="Chrome, Edge, or Opera required. Safari and Firefox are not supported." data-zh="需要 Chrome、Edge 或 Opera 浏览器。不支持 Safari 和 Firefox。">
-                    Chrome, Edge, or Opera required. Safari and Firefox are not supported.
-                </span>
+                <strong>⚠️</strong> <span data-en="Requires Chrome, Edge, or Opera browser" data-zh="需要 Chrome、Edge 或 Opera 浏览器">Requires Chrome, Edge, or Opera browser</span>
             </div>
         </section>
         
-        <section class="firmware-section">
-            <h2 data-en="Available Firmware" data-zh="可用固件">Available Firmware</h2>
+        <!-- Seeed-Specific Firmware -->
+        <section class="section section-seeed">
+            <div class="section-header">
+                <div class="section-icon">🏭</div>
+                <h2 class="section-title" data-en="Seeed-Specific Firmware" data-zh="Seeed 专用固件">Seeed-Specific Firmware</h2>
+                <div class="section-hint" data-en="Only for specific Seeed hardware" data-zh="仅适用于特定 Seeed 硬件">⚠️ <span data-en="Only for specific Seeed hardware" data-zh="仅适用于特定 Seeed 硬件">Only for specific Seeed hardware</span></div>
+            </div>
             
             <div class="firmware-grid">
                 <!-- IoT Button V2 -->
@@ -502,94 +370,236 @@
                         <div class="card-icon">🔘</div>
                         <div>
                             <div class="card-title">IoT Button V2</div>
-                            <span class="card-chip">ESP32-C6</span>
+                            <div class="card-chips">
+                                <span class="card-chip seeed">XIAO ESP32-C6</span>
+                            </div>
                         </div>
                     </div>
-                    <p class="card-description" data-en="Low-power IoT button with deep sleep mode (~10µA). Supports single/double/triple click and long press. Web-based WiFi provisioning included." data-zh="低功耗物联网按钮，支持深度睡眠模式（约 10µA）。支持单击/双击/三击和长按。包含网页配网功能。">
-                        Low-power IoT button with deep sleep mode (~10µA). Supports single/double/triple click and long press. Web-based WiFi provisioning included.
+                    <p class="card-description" data-en="Low-power IoT button with deep sleep (~10µA). Single/double/triple click and long press support." data-zh="低功耗物联网按钮，深度睡眠约 10µA。支持单击/双击/三击和长按。">
+                        Low-power IoT button with deep sleep (~10µA). Single/double/triple click and long press support.
                     </p>
                     <div class="card-features">
                         <span class="feature-tag" data-en="Deep Sleep" data-zh="深度睡眠">Deep Sleep</span>
-                        <span class="feature-tag" data-en="Web Provisioning" data-zh="网页配网">Web Provisioning</span>
                         <span class="feature-tag" data-en="RGB LED" data-zh="RGB LED">RGB LED</span>
-                        <span class="feature-tag" data-en="Battery Monitor" data-zh="电池监测">Battery Monitor</span>
+                        <span class="feature-tag" data-en="Battery" data-zh="电池监测">Battery</span>
                     </div>
-                    
                     <esp-web-install-button manifest="./firmware/IoTButtonV2_DeepSleep/manifest.json">
-                        <button slot="activate" data-en="Install IoT Button V2 Firmware" data-zh="安装 IoT Button V2 固件">
-                            Install IoT Button V2 Firmware
-                        </button>
-                        <span slot="unsupported" data-en="Your browser doesn't support Web Serial" data-zh="您的浏览器不支持 Web Serial">
-                            Your browser doesn't support Web Serial
-                        </span>
-                        <span slot="not-allowed" data-en="Not allowed to use Web Serial" data-zh="不允许使用 Web Serial">
-                            Not allowed to use Web Serial
-                        </span>
+                        <button slot="activate" data-en="Install Firmware" data-zh="安装固件">Install Firmware</button>
                     </esp-web-install-button>
-                    <div class="unsupported" data-en="Please use Chrome, Edge, or Opera browser" data-zh="请使用 Chrome、Edge 或 Opera 浏览器">
-                        Please use Chrome, Edge, or Opera browser
-                    </div>
+                    <div class="unsupported" data-en="Browser not supported" data-zh="浏览器不支持">Browser not supported</div>
                 </div>
                 
-                <!-- WiFi Provisioning Example (Multi-chip) | WiFi 配网示例（多芯片） -->
+                <!-- Camera Stream -->
                 <div class="firmware-card">
+                    <div class="card-header">
+                        <div class="card-icon">📷</div>
+                        <div>
+                            <div class="card-title">Camera Stream</div>
+                            <div class="card-chips">
+                                <span class="card-chip seeed">XIAO ESP32-S3 Sense</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="card-description" data-en="Stream camera video to Home Assistant via MJPEG. Requires PSRAM enabled." data-zh="通过 MJPEG 将摄像头视频流推送到 Home Assistant。需要启用 PSRAM。">
+                        Stream camera video to Home Assistant via MJPEG. Requires PSRAM enabled.
+                    </p>
+                    <div class="card-features">
+                        <span class="feature-tag" data-en="MJPEG" data-zh="MJPEG">MJPEG</span>
+                        <span class="feature-tag" data-en="OV2640" data-zh="OV2640">OV2640</span>
+                        <span class="feature-tag" data-en="PSRAM" data-zh="PSRAM">PSRAM</span>
+                    </div>
+                    <esp-web-install-button manifest="./firmware/CameraStream/manifest.json">
+                        <button slot="activate" data-en="Install Firmware" data-zh="安装固件">Install Firmware</button>
+                    </esp-web-install-button>
+                    <div class="unsupported" data-en="Browser not supported" data-zh="浏览器不支持">Browser not supported</div>
+                </div>
+                
+                <!-- reTerminal E1001 -->
+                <div class="firmware-card" style="opacity: 0.7;">
+                    <div class="card-header">
+                        <div class="card-icon">🖥️</div>
+                        <div>
+                            <div class="card-title">reTerminal E1001</div>
+                            <div class="card-chips">
+                                <span class="card-chip seeed">reTerminal E1001</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="card-description" data-en="HA dashboard on 4-level grayscale E-Paper (800x480). Auto-updates subscribed entities." data-zh="四阶灰度墨水屏 HA 仪表板（800x480）。自动更新订阅的实体。">
+                        HA dashboard on 4-level grayscale E-Paper (800x480). Auto-updates subscribed entities.
+                    </p>
+                    <div class="card-features">
+                        <span class="feature-tag" data-en="E-Paper" data-zh="墨水屏">E-Paper</span>
+                        <span class="feature-tag" data-en="Dashboard" data-zh="仪表板">Dashboard</span>
+                    </div>
+                    <button disabled style="width:100%;padding:0.875rem;background:var(--bg-secondary);border:1px dashed var(--border-color);border-radius:10px;color:var(--text-muted);cursor:not-allowed;" data-en="Requires Seeed_GFX Library" data-zh="需要 Seeed_GFX 库">🚧 Requires Seeed_GFX Library</button>
+                </div>
+                
+                <!-- reTerminal E1002 -->
+                <div class="firmware-card" style="opacity: 0.7;">
+                    <div class="card-header">
+                        <div class="card-icon">🖥️</div>
+                        <div>
+                            <div class="card-title">reTerminal E1002</div>
+                            <div class="card-chips">
+                                <span class="card-chip seeed">reTerminal E1002</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="card-description" data-en="HA dashboard on 6-color E-Paper (800x480). Beautiful color-coded entity cards." data-zh="六色墨水屏 HA 仪表板（800x480）。漂亮的彩色实体卡片。">
+                        HA dashboard on 6-color E-Paper (800x480). Beautiful color-coded entity cards.
+                    </p>
+                    <div class="card-features">
+                        <span class="feature-tag" data-en="6-Color" data-zh="六色">6-Color</span>
+                        <span class="feature-tag" data-en="Dashboard" data-zh="仪表板">Dashboard</span>
+                    </div>
+                    <button disabled style="width:100%;padding:0.875rem;background:var(--bg-secondary);border:1px dashed var(--border-color);border-radius:10px;color:var(--text-muted);cursor:not-allowed;" data-en="Requires Seeed_GFX Library" data-zh="需要 Seeed_GFX 库">🚧 Requires Seeed_GFX Library</button>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Universal Firmware -->
+        <section class="section section-universal">
+            <div class="section-header">
+                <div class="section-icon">🌐</div>
+                <h2 class="section-title" data-en="Universal Firmware" data-zh="通用固件">Universal Firmware</h2>
+                <div class="section-hint"><strong>✨</strong> <span data-en="Auto chip detection - just select the correct serial port" data-zh="自动芯片检测 - 只需选择正确的串口">Auto chip detection - just select the correct serial port</span></div>
+            </div>
+            
+            <div class="firmware-grid">
+                <!-- WiFi Provisioning -->
+                <div class="firmware-card">
+                    <div class="auto-detect-badge">🔍 <span data-en="Auto Detect" data-zh="自动检测">Auto Detect</span></div>
                     <div class="card-header">
                         <div class="card-icon">📶</div>
                         <div>
-                            <div class="card-title">WiFi Provisioning Demo</div>
-                            <div style="display: flex; gap: 0.3rem; flex-wrap: wrap; margin-top: 0.25rem;">
+                            <div class="card-title">WiFi Provisioning</div>
+                            <div class="card-chips">
                                 <span class="card-chip">ESP32-C3</span>
                                 <span class="card-chip">ESP32-C6</span>
                                 <span class="card-chip">ESP32-S3</span>
                             </div>
                         </div>
                     </div>
-                    <p class="card-description" data-en="Simple WiFi provisioning example. Auto-detects your chip and flashes the correct firmware." data-zh="简单的 WiFi 配网示例。自动检测芯片并烧录正确的固件。">
-                        Simple WiFi provisioning example. Auto-detects your chip and flashes the correct firmware.
+                    <p class="card-description" data-en="Web-based WiFi setup demo. Creates AP for easy network configuration." data-zh="基于网页的 WiFi 配网演示。创建 AP 热点便于网络配置。">
+                        Web-based WiFi setup demo. Creates AP for easy network configuration.
                     </p>
                     <div class="card-features">
-                        <span class="feature-tag" data-en="Auto Chip Detect" data-zh="自动芯片检测">Auto Chip Detect</span>
-                        <span class="feature-tag" data-en="Web Provisioning" data-zh="网页配网">Web Provisioning</span>
                         <span class="feature-tag" data-en="Captive Portal" data-zh="强制门户">Captive Portal</span>
+                        <span class="feature-tag" data-en="Auto-connect" data-zh="自动连接">Auto-connect</span>
                     </div>
-                    
                     <esp-web-install-button manifest="./firmware/WiFiProvisioning/manifest.json">
-                        <button slot="activate" data-en="Install WiFi Demo Firmware" data-zh="安装 WiFi 演示固件">
-                            Install WiFi Demo Firmware
-                        </button>
-                        <span slot="unsupported" data-en="Your browser doesn't support Web Serial" data-zh="您的浏览器不支持 Web Serial">
-                            Your browser doesn't support Web Serial
-                        </span>
-                        <span slot="not-allowed" data-en="Not allowed to use Web Serial" data-zh="不允许使用 Web Serial">
-                            Not allowed to use Web Serial
-                        </span>
+                        <button slot="activate" data-en="Install Firmware" data-zh="安装固件">Install Firmware</button>
                     </esp-web-install-button>
-                    <div class="unsupported" data-en="Please use Chrome, Edge, or Opera browser" data-zh="请使用 Chrome、Edge 或 Opera 浏览器">
-                        Please use Chrome, Edge, or Opera browser
-                    </div>
+                    <div class="unsupported" data-en="Browser not supported" data-zh="浏览器不支持">Browser not supported</div>
                 </div>
                 
-                <!-- Camera Stream (Coming Soon) -->
-                <div class="firmware-card" style="opacity: 0.6;">
+                <!-- Button Switch -->
+                <div class="firmware-card">
+                    <div class="auto-detect-badge">🔍 <span data-en="Auto Detect" data-zh="自动检测">Auto Detect</span></div>
                     <div class="card-header">
-                        <div class="card-icon">📷</div>
+                        <div class="card-icon">👆</div>
                         <div>
-                            <div class="card-title">Camera Stream</div>
-                            <span class="card-chip">ESP32-S3</span>
+                            <div class="card-title">Button Switch</div>
+                            <div class="card-chips">
+                                <span class="card-chip">ESP32-C3</span>
+                                <span class="card-chip">ESP32-C6</span>
+                                <span class="card-chip">ESP32-S3</span>
+                            </div>
                         </div>
                     </div>
-                    <p class="card-description" data-en="Camera streaming firmware for XIAO ESP32S3 Sense. Stream video directly to Home Assistant. (Coming Soon)" data-zh="适用于 XIAO ESP32S3 Sense 的摄像头流媒体固件。直接向 Home Assistant 传输视频。（即将推出）">
-                        Camera streaming firmware for XIAO ESP32S3 Sense. Stream video directly to Home Assistant. (Coming Soon)
+                    <p class="card-description" data-en="Button with single/double/long press detection. Each creates a switch in HA." data-zh="支持单击/双击/长按检测的按钮。每种按法在 HA 中创建一个开关。">
+                        Button with single/double/long press detection. Each creates a switch in HA.
                     </p>
                     <div class="card-features">
-                        <span class="feature-tag" data-en="Video Stream" data-zh="视频流">Video Stream</span>
-                        <span class="feature-tag" data-en="MJPEG" data-zh="MJPEG">MJPEG</span>
-                        <span class="feature-tag" data-en="HA Camera" data-zh="HA 摄像头">HA Camera</span>
+                        <span class="feature-tag" data-en="Multi-click" data-zh="多击">Multi-click</span>
+                        <span class="feature-tag" data-en="3 Switches" data-zh="3个开关">3 Switches</span>
                     </div>
-                    
-                    <button disabled class="btn-coming-soon" data-en="Coming Soon" data-zh="即将推出">
-                        Coming Soon
-                    </button>
+                    <esp-web-install-button manifest="./firmware/ButtonSwitch/manifest.json">
+                        <button slot="activate" data-en="Install Firmware" data-zh="安装固件">Install Firmware</button>
+                    </esp-web-install-button>
+                    <div class="unsupported" data-en="Browser not supported" data-zh="浏览器不支持">Browser not supported</div>
+                </div>
+                
+                <!-- LED Switch -->
+                <div class="firmware-card">
+                    <div class="auto-detect-badge">🔍 <span data-en="Auto Detect" data-zh="自动检测">Auto Detect</span></div>
+                    <div class="card-header">
+                        <div class="card-icon">💡</div>
+                        <div>
+                            <div class="card-title">LED Switch</div>
+                            <div class="card-chips">
+                                <span class="card-chip">ESP32-C3</span>
+                                <span class="card-chip">ESP32-C6</span>
+                                <span class="card-chip">ESP32-S3</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="card-description" data-en="Control onboard LED from Home Assistant. Simple switch entity demo." data-zh="从 Home Assistant 控制板载 LED。简单的开关实体演示。">
+                        Control onboard LED from Home Assistant. Simple switch entity demo.
+                    </p>
+                    <div class="card-features">
+                        <span class="feature-tag" data-en="LED Control" data-zh="LED 控制">LED Control</span>
+                        <span class="feature-tag" data-en="Simple" data-zh="简单">Simple</span>
+                    </div>
+                    <esp-web-install-button manifest="./firmware/LEDSwitch/manifest.json">
+                        <button slot="activate" data-en="Install Firmware" data-zh="安装固件">Install Firmware</button>
+                    </esp-web-install-button>
+                    <div class="unsupported" data-en="Browser not supported" data-zh="浏览器不支持">Browser not supported</div>
+                </div>
+                
+                <!-- HA State Subscribe -->
+                <div class="firmware-card">
+                    <div class="auto-detect-badge">🔍 <span data-en="Auto Detect" data-zh="自动检测">Auto Detect</span></div>
+                    <div class="card-header">
+                        <div class="card-icon">📊</div>
+                        <div>
+                            <div class="card-title">HA State Subscribe</div>
+                            <div class="card-chips">
+                                <span class="card-chip">ESP32-C3</span>
+                                <span class="card-chip">ESP32-C6</span>
+                                <span class="card-chip">ESP32-S3</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="card-description" data-en="Receive and display HA entity states. Great for custom dashboards." data-zh="接收并显示 HA 实体状态。适合制作自定义仪表板。">
+                        Receive and display HA entity states. Great for custom dashboards.
+                    </p>
+                    <div class="card-features">
+                        <span class="feature-tag" data-en="Subscribe" data-zh="订阅">Subscribe</span>
+                        <span class="feature-tag" data-en="Dashboard" data-zh="仪表板">Dashboard</span>
+                    </div>
+                    <esp-web-install-button manifest="./firmware/HAStateSubscribe/manifest.json">
+                        <button slot="activate" data-en="Install Firmware" data-zh="安装固件">Install Firmware</button>
+                    </esp-web-install-button>
+                    <div class="unsupported" data-en="Browser not supported" data-zh="浏览器不支持">Browser not supported</div>
+                </div>
+                
+                <!-- Temperature Humidity -->
+                <div class="firmware-card">
+                    <div class="auto-detect-badge">🔍 <span data-en="Auto Detect" data-zh="自动检测">Auto Detect</span></div>
+                    <div class="card-header">
+                        <div class="card-icon">🌡️</div>
+                        <div>
+                            <div class="card-title">Temperature & Humidity</div>
+                            <div class="card-chips">
+                                <span class="card-chip">ESP32-C3</span>
+                                <span class="card-chip">ESP32-C6</span>
+                                <span class="card-chip">ESP32-S3</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="card-description" data-en="Temperature and humidity sensor demo. Uses simulated data or DHT22." data-zh="温湿度传感器演示。使用模拟数据或 DHT22。">
+                        Temperature and humidity sensor demo. Uses simulated data or DHT22.
+                    </p>
+                    <div class="card-features">
+                        <span class="feature-tag" data-en="Sensors" data-zh="传感器">Sensors</span>
+                        <span class="feature-tag" data-en="DHT22" data-zh="DHT22">DHT22</span>
+                    </div>
+                    <esp-web-install-button manifest="./firmware/TemperatureHumidity/manifest.json">
+                        <button slot="activate" data-en="Install Firmware" data-zh="安装固件">Install Firmware</button>
+                    </esp-web-install-button>
+                    <div class="unsupported" data-en="Browser not supported" data-zh="浏览器不支持">Browser not supported</div>
                 </div>
             </div>
         </section>
@@ -598,53 +608,38 @@
             <p>
                 <span data-en="Powered by" data-zh="由">Powered by</span>
                 <a href="https://esphome.github.io/esp-web-tools/" target="_blank">ESP Web Tools</a> |
-                <a href="https://github.com/Seeed-Studio/SenseCraft-HomeAssistant" target="_blank">GitHub</a> |
+                <a href="https://github.com/limengdu/Seeed-Homeassistant-Discovery" target="_blank">GitHub</a> |
                 <a href="https://wiki.seeedstudio.com/" target="_blank">Seeed Wiki</a>
             </p>
-            <p style="margin-top: 0.5rem;">
-                © 2024 Seeed Technology Co., Ltd.
-            </p>
+            <p style="margin-top: 0.5rem;">© 2024 Seeed Technology Co., Ltd.</p>
         </footer>
     </div>
     
     <script>
-        // Language switching | 语言切换
         let currentLang = 'en';
         
         function setLanguage(lang) {
             currentLang = lang;
-            
-            // Update button states | 更新按钮状态
             document.querySelectorAll('.lang-btn').forEach(btn => {
                 btn.classList.remove('active');
                 if (btn.textContent.includes(lang === 'en' ? 'English' : '中文')) {
                     btn.classList.add('active');
                 }
             });
-            
-            // Update all translatable elements | 更新所有可翻译元素
             document.querySelectorAll('[data-en][data-zh]').forEach(el => {
                 el.textContent = el.getAttribute(`data-${lang}`);
             });
-            
-            // Save preference | 保存偏好
             localStorage.setItem('preferred-lang', lang);
         }
         
-        // Load saved preference | 加载保存的偏好
         document.addEventListener('DOMContentLoaded', () => {
             const savedLang = localStorage.getItem('preferred-lang');
             if (savedLang) {
                 setLanguage(savedLang);
-            } else {
-                // Auto-detect language | 自动检测语言
-                const browserLang = navigator.language.toLowerCase();
-                if (browserLang.startsWith('zh')) {
-                    setLanguage('zh');
-                }
+            } else if (navigator.language.toLowerCase().startsWith('zh')) {
+                setLanguage('zh');
             }
         });
     </script>
 </body>
 </html>
-
