@@ -292,11 +292,30 @@ jobs:
           echo "Created index.json:"
           cat index.json
 
-      - name: Get version
+      - name: Get version and changelog
         id: version
         run: |
           VERSION=$(date +'%Y.%m.%d')-$(git rev-parse --short HEAD)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          # Get the last release tag (if exists) | 获取上一个 release 标签（如果存在）
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          
+          # Generate changelog | 生成更新日志
+          echo "Generating changelog..."
+          if [ -n "$LAST_TAG" ]; then
+            echo "Changes since $LAST_TAG:"
+            CHANGELOG=$(git log ${LAST_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges | head -30)
+          else
+            echo "No previous tag found, using last 20 commits"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
+          fi
+          
+          # Save changelog to file (to handle multiline in GitHub Actions)
+          # 保存更新日志到文件（处理 GitHub Actions 中的多行）
+          echo "$CHANGELOG" > changelog.txt
+          echo "Changelog generated:"
+          cat changelog.txt
 
       - name: Package firmware for release
         run: |
@@ -318,32 +337,64 @@ jobs:
           echo "Created packages:"
           ls -la firmware/*.zip
 
+      - name: Generate release body
+        id: release_body
+        run: |
+          # Read changelog | 读取更新日志
+          CHANGELOG=$(cat changelog.txt)
+          
+          # Create release body | 创建发布说明
+          cat > release_body.md << 'ENDOFHEADER'
+          ## 🚀 Firmware Release
+          
+          Pre-compiled firmware for Seeed HA Discovery devices.
+          为 Seeed HA Discovery 设备预编译的固件。
+          
+          ### 📥 How to Flash | 如何烧录
+          
+          **Web Flasher (Recommended | 推荐):**
+          Visit [Web Flasher](https://limengdu.github.io/Seeed-Homeassistant-Discovery/flasher/) to flash directly from browser.
+          访问 [网页烧录器](https://limengdu.github.io/Seeed-Homeassistant-Discovery/flasher/) 直接从浏览器烧录。
+          
+          ### 📦 Included Firmware | 包含的固件
+          
+          | Firmware | Chip | Description |
+          |----------|------|-------------|
+          | IoTButtonV2_DeepSleep | ESP32-C6 | Low-power IoT button with deep sleep |
+          | WiFiProvisioning | ESP32-C6 | WiFi provisioning demo |
+          
+          ### 📁 Downloads | 下载
+          
+          - `all-firmware.zip` - All firmware in one package | 所有固件合集
+          - Individual firmware zip files available below | 单独固件 zip 文件如下
+          
+          ### 📝 Changelog | 更新日志
+          
+          ENDOFHEADER
+          
+          # Append changelog | 添加更新日志
+          echo "$CHANGELOG" >> release_body.md
+          
+          # Add build info | 添加构建信息
+          cat >> release_body.md << ENDOFFOOTER
+          
+          ---
+          
+          **Build Info | 构建信息:**
+          - ESP32 Core Version: ${{ env.ESP32_CORE_VERSION }}
+          - Build Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          - Commit: ${{ github.sha }}
+          ENDOFFOOTER
+          
+          echo "Release body generated:"
+          cat release_body.md
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: firmware-${{ steps.version.outputs.version }}
           name: Firmware Release ${{ steps.version.outputs.version }}
-          body: |
-            ## Firmware Release
-            
-            This release contains pre-compiled firmware for Seeed HA Discovery devices.
-            
-            ### How to Flash | 如何烧录
-            
-            Visit our [Web Flasher](https://limengdu.github.io/Seeed-Homeassistant-Discovery/flasher/) to flash firmware directly from your browser.
-            
-            Or download the zip files and use ESP Web Tools manually.
-            
-            ### Included Firmware | 包含的固件
-            
-            - IoTButtonV2_DeepSleep (ESP32-C6)
-            - WiFiProvisioning (ESP32-C6)
-            
-            ### Downloads | 下载
-            
-            - `all-firmware.zip` - All firmware in one package | 所有固件合集
-            - `IoTButtonV2_DeepSleep.zip` - IoT Button V2 firmware only
-            - `WiFiProvisioning.zip` - WiFi Provisioning demo only
+          body_path: release_body.md
           files: |
             firmware/*.zip
 

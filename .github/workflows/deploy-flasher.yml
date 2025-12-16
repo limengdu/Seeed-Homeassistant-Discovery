@@ -2,25 +2,33 @@
 # 用于将网页烧录器部署到 GitHub Pages 的工作流
 #
 # This workflow:
-# 1. Builds firmware using the build-firmware workflow
-# 2. Copies firmware binaries to the flasher directory
+# 1. Waits for build-firmware workflow to complete
+# 2. Downloads firmware artifacts
 # 3. Deploys to GitHub Pages
 #
 # 此工作流：
-# 1. 使用 build-firmware 工作流构建固件
-# 2. 将固件二进制文件复制到烧录器目录
+# 1. 等待 build-firmware 工作流完成
+# 2. 下载固件 artifacts
 # 3. 部署到 GitHub Pages
 
 name: Deploy Web Flasher
 
 on:
+  # Trigger after build-firmware workflow completes | 在 build-firmware 工作流完成后触发
+  workflow_run:
+    workflows: ["Build Firmware"]
+    types:
+      - completed
+    branches: [main, master]
+  
+  # Also trigger on docs/flasher changes (no firmware rebuild needed)
+  # 在 docs/flasher 更改时也触发（无需重新构建固件）
   push:
     branches: [main, master]
     paths:
-      - 'arduino/**'
       - 'docs/flasher/**'
       - '.github/workflows/deploy-flasher.yml'
-      - '.github/workflows/build-firmware.yml'
+  
   workflow_dispatch:  # Allow manual trigger | 允许手动触发
 
 # Allow only one concurrent deployment
@@ -29,13 +37,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Build firmware first | 首先构建固件
-  build-firmware:
-    uses: ./.github/workflows/build-firmware.yml
-
   # Deploy to GitHub Pages | 部署到 GitHub Pages
   deploy:
-    needs: build-firmware
+    # Only run if triggered by successful build or push/manual trigger
+    # 仅在构建成功触发或 push/手动触发时运行
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     
     permissions:
@@ -51,11 +57,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download firmware artifacts
-        uses: actions/download-artifact@v4
+      - name: Download firmware artifacts from workflow_run
+        if: ${{ github.event_name == 'workflow_run' }}
+        uses: dawidd6/action-download-artifact@v3
         with:
+          workflow: build-firmware.yml
+          run_id: ${{ github.event.workflow_run.id }}
           name: all-firmware
           path: firmware-download/
+
+      - name: Download firmware artifacts (manual/push trigger)
+        if: ${{ github.event_name != 'workflow_run' }}
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: build-firmware.yml
+          branch: main
+          name: all-firmware
+          path: firmware-download/
+        continue-on-error: true  # May not exist if only docs changed | 如果只是 docs 更改可能不存在
 
       - name: Prepare deployment directory
         run: |
