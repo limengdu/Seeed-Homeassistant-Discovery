@@ -392,8 +392,6 @@ jobs:
             fi
             
             # Handle WiFiProvisioning (multi-chip) | 处理 WiFiProvisioning（多芯片）
-            # Merge all chip variants into one folder with subfolders
-            # 将所有芯片变体合并到一个带有子文件夹的目录中
             mkdir -p combined-firmware/WiFiProvisioning
             
             for chip in C3 C6 S3; do
@@ -403,86 +401,6 @@ jobs:
                 cp -r "all-firmware/firmware-WiFiProvisioning-${chip}/"* "combined-firmware/WiFiProvisioning/${chip}/"
               fi
             done
-            
-            # Create multi-build manifest.json for WiFiProvisioning
-            # 为 WiFiProvisioning 创建多芯片 manifest.json
-            # ESP Web Tools will auto-detect connected chip and use correct build
-            # ESP Web Tools 会自动检测连接的芯片并使用正确的构建
-            if [ -d "combined-firmware/WiFiProvisioning" ] && [ "$(ls -A combined-firmware/WiFiProvisioning 2>/dev/null)" ]; then
-              echo "Creating multi-build manifest.json for WiFiProvisioning..."
-              
-              # Start manifest | 开始 manifest
-              cat > combined-firmware/WiFiProvisioning/manifest.json << 'MANIFEST_START'
-{
-  "name": "WiFiProvisioning",
-  "version": "1.0.0",
-  "home_assistant_domain": "seeed_ha_discovery",
-  "funding_url": "https://www.seeedstudio.com/",
-  "new_install_prompt_erase": true,
-  "new_install_improv_wait_time": 0,
-  "builds": [
-MANIFEST_START
-              
-              # Add builds for each available chip | 为每个可用芯片添加构建
-              FIRST_BUILD=true
-              
-              if [ -d "combined-firmware/WiFiProvisioning/C3" ]; then
-                if [ "$FIRST_BUILD" = false ]; then echo "," >> combined-firmware/WiFiProvisioning/manifest.json; fi
-                FIRST_BUILD=false
-                cat >> combined-firmware/WiFiProvisioning/manifest.json << 'BUILD_C3'
-    {
-      "chipFamily": "ESP32-C3",
-      "parts": [
-        { "path": "C3/bootloader.bin", "offset": 0 },
-        { "path": "C3/partitions.bin", "offset": 32768 },
-        { "path": "C3/boot_app0.bin", "offset": 57344 },
-        { "path": "C3/firmware.bin", "offset": 65536 }
-      ]
-    }
-BUILD_C3
-              fi
-              
-              if [ -d "combined-firmware/WiFiProvisioning/C6" ]; then
-                if [ "$FIRST_BUILD" = false ]; then echo "," >> combined-firmware/WiFiProvisioning/manifest.json; fi
-                FIRST_BUILD=false
-                cat >> combined-firmware/WiFiProvisioning/manifest.json << 'BUILD_C6'
-    {
-      "chipFamily": "ESP32-C6",
-      "parts": [
-        { "path": "C6/bootloader.bin", "offset": 0 },
-        { "path": "C6/partitions.bin", "offset": 32768 },
-        { "path": "C6/boot_app0.bin", "offset": 57344 },
-        { "path": "C6/firmware.bin", "offset": 65536 }
-      ]
-    }
-BUILD_C6
-              fi
-              
-              if [ -d "combined-firmware/WiFiProvisioning/S3" ]; then
-                if [ "$FIRST_BUILD" = false ]; then echo "," >> combined-firmware/WiFiProvisioning/manifest.json; fi
-                FIRST_BUILD=false
-                cat >> combined-firmware/WiFiProvisioning/manifest.json << 'BUILD_S3'
-    {
-      "chipFamily": "ESP32-S3",
-      "parts": [
-        { "path": "S3/bootloader.bin", "offset": 0 },
-        { "path": "S3/partitions.bin", "offset": 32768 },
-        { "path": "S3/boot_app0.bin", "offset": 57344 },
-        { "path": "S3/firmware.bin", "offset": 65536 }
-      ]
-    }
-BUILD_S3
-              fi
-              
-              # Close manifest | 关闭 manifest
-              cat >> combined-firmware/WiFiProvisioning/manifest.json << 'MANIFEST_END'
-  ]
-}
-MANIFEST_END
-              
-              echo "Generated manifest.json:"
-              cat combined-firmware/WiFiProvisioning/manifest.json
-            fi
           fi
           
           echo ""
@@ -490,6 +408,70 @@ MANIFEST_END
           echo "Combined firmware structure:"
           echo "=========================="
           find combined-firmware -type f 2>/dev/null || echo "No firmware files"
+
+      - name: Generate WiFiProvisioning multi-chip manifest
+        run: |
+          # Create multi-build manifest.json for WiFiProvisioning
+          # ESP Web Tools will auto-detect connected chip and use correct build
+          if [ -d "combined-firmware/WiFiProvisioning" ] && [ "$(ls -A combined-firmware/WiFiProvisioning 2>/dev/null)" ]; then
+            echo "Creating multi-build manifest.json for WiFiProvisioning..."
+            
+            # Build the manifest using a script approach
+            MANIFEST="combined-firmware/WiFiProvisioning/manifest.json"
+            
+            echo '{' > $MANIFEST
+            echo '  "name": "WiFiProvisioning",' >> $MANIFEST
+            echo '  "version": "1.0.0",' >> $MANIFEST
+            echo '  "home_assistant_domain": "seeed_ha_discovery",' >> $MANIFEST
+            echo '  "funding_url": "https://www.seeedstudio.com/",' >> $MANIFEST
+            echo '  "new_install_prompt_erase": true,' >> $MANIFEST
+            echo '  "new_install_improv_wait_time": 0,' >> $MANIFEST
+            echo '  "builds": [' >> $MANIFEST
+            
+            FIRST=true
+            
+            # Add C3 build if exists
+            if [ -d "combined-firmware/WiFiProvisioning/C3" ]; then
+              if [ "$FIRST" = false ]; then echo ',' >> $MANIFEST; fi
+              FIRST=false
+              echo '    {"chipFamily":"ESP32-C3","parts":[' >> $MANIFEST
+              echo '      {"path":"C3/bootloader.bin","offset":0},' >> $MANIFEST
+              echo '      {"path":"C3/partitions.bin","offset":32768},' >> $MANIFEST
+              echo '      {"path":"C3/boot_app0.bin","offset":57344},' >> $MANIFEST
+              echo '      {"path":"C3/firmware.bin","offset":65536}' >> $MANIFEST
+              echo '    ]}' >> $MANIFEST
+            fi
+            
+            # Add C6 build if exists
+            if [ -d "combined-firmware/WiFiProvisioning/C6" ]; then
+              if [ "$FIRST" = false ]; then echo ',' >> $MANIFEST; fi
+              FIRST=false
+              echo '    {"chipFamily":"ESP32-C6","parts":[' >> $MANIFEST
+              echo '      {"path":"C6/bootloader.bin","offset":0},' >> $MANIFEST
+              echo '      {"path":"C6/partitions.bin","offset":32768},' >> $MANIFEST
+              echo '      {"path":"C6/boot_app0.bin","offset":57344},' >> $MANIFEST
+              echo '      {"path":"C6/firmware.bin","offset":65536}' >> $MANIFEST
+              echo '    ]}' >> $MANIFEST
+            fi
+            
+            # Add S3 build if exists
+            if [ -d "combined-firmware/WiFiProvisioning/S3" ]; then
+              if [ "$FIRST" = false ]; then echo ',' >> $MANIFEST; fi
+              FIRST=false
+              echo '    {"chipFamily":"ESP32-S3","parts":[' >> $MANIFEST
+              echo '      {"path":"S3/bootloader.bin","offset":0},' >> $MANIFEST
+              echo '      {"path":"S3/partitions.bin","offset":32768},' >> $MANIFEST
+              echo '      {"path":"S3/boot_app0.bin","offset":57344},' >> $MANIFEST
+              echo '      {"path":"S3/firmware.bin","offset":65536}' >> $MANIFEST
+              echo '    ]}' >> $MANIFEST
+            fi
+            
+            echo '  ]' >> $MANIFEST
+            echo '}' >> $MANIFEST
+            
+            echo "Generated manifest.json:"
+            cat $MANIFEST
+          fi
 
       - name: Upload combined firmware
         uses: actions/upload-artifact@v4
