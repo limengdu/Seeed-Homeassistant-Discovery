@@ -415,7 +415,7 @@
                 </div>
                 
                 <!-- reTerminal E1001 -->
-                <div class="firmware-card" style="opacity: 0.7;">
+                <div class="firmware-card">
                     <div class="card-header">
                         <div class="card-icon">🖥️</div>
                         <div>
@@ -432,11 +432,13 @@
                         <span class="feature-tag" data-en="E-Paper" data-zh="墨水屏">E-Paper</span>
                         <span class="feature-tag" data-en="Dashboard" data-zh="仪表板">Dashboard</span>
                     </div>
-                    <button disabled style="width:100%;padding:0.875rem;background:var(--bg-secondary);border:1px dashed var(--border-color);border-radius:10px;color:var(--text-muted);cursor:not-allowed;" data-en="Requires Seeed_GFX Library" data-zh="需要 Seeed_GFX 库">🚧 Requires Seeed_GFX Library</button>
+                    <esp-web-install-button manifest="./firmware/reTerminal_E1001_HASubscribe_Display/manifest.json">
+                        <button slot="activate" class="install-btn" data-en="Install Firmware" data-zh="安装固件">⚡ Install Firmware</button>
+                    </esp-web-install-button>
                 </div>
                 
                 <!-- reTerminal E1002 -->
-                <div class="firmware-card" style="opacity: 0.7;">
+                <div class="firmware-card">
                     <div class="card-header">
                         <div class="card-icon">🖥️</div>
                         <div>
@@ -453,7 +455,9 @@
                         <span class="feature-tag" data-en="6-Color" data-zh="六色">6-Color</span>
                         <span class="feature-tag" data-en="Dashboard" data-zh="仪表板">Dashboard</span>
                     </div>
-                    <button disabled style="width:100%;padding:0.875rem;background:var(--bg-secondary);border:1px dashed var(--border-color);border-radius:10px;color:var(--text-muted);cursor:not-allowed;" data-en="Requires Seeed_GFX Library" data-zh="需要 Seeed_GFX 库">🚧 Requires Seeed_GFX Library</button>
+                    <esp-web-install-button manifest="./firmware/reTerminal_E1002_HASubscribe_Display/manifest.json">
+                        <button slot="activate" class="install-btn" data-en="Install Firmware" data-zh="安装固件">⚡ Install Firmware</button>
+                    </esp-web-install-button>
                 </div>
             </div>
         </section>
