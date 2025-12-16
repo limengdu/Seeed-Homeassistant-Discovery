@@ -1,6 +1,6 @@
 {
   "name": "Seeed HA Discovery",
-  "homeassistant": "2024.1.0",
+  "homeassistant": "2025.12.3",
   "render_readme": true,
   "zip_release": false,
   "content_in_root": false
