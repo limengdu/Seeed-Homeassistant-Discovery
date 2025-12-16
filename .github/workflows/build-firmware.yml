@@ -98,7 +98,7 @@ jobs:
       - name: Compile
         run: |
           mkdir -p build/CameraStream
-          arduino-cli compile --fqbn "esp32:esp32:XIAO_ESP32S3:CDCOnBoot=cdc,PartitionScheme=huge_app,USBMode=hwcdc,PSRAM=opi,FlashMode=qio,FlashSize=8M" \
+          arduino-cli compile --fqbn "esp32:esp32:XIAO_ESP32S3:CDCOnBoot=cdc,PartitionScheme=default,USBMode=hwcdc,PSRAM=opi,FlashMode=qio,FlashSize=8M" \
             --output-dir "build/CameraStream" --export-binaries \
             "arduino/SeeedHADiscovery/examples/CameraStream/CameraStream.ino"
       - name: Prepare firmware
