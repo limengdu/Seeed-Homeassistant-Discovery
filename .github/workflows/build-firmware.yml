@@ -1,9 +1,17 @@
 # GitHub Actions workflow for compiling Arduino firmware
 # 用于编译 Arduino 固件的 GitHub Actions 工作流
 #
-# This workflow automatically compiles all firmware examples for different boards
-# and creates releases with the compiled binaries for web flashing.
-# 此工作流自动为不同开发板编译所有固件示例，并创建包含编译好的二进制文件的发布版本，用于网页烧录。
+# This workflow automatically compiles ONLY the firmware that was modified.
+# 此工作流自动只编译被修改的固件。
+#
+# Smart build detection:
+# 智能构建检测：
+# - If library source (src/) changes: rebuild ALL firmware
+#   如果库源码（src/）更改：重新构建所有固件
+# - If specific example changes: rebuild ONLY that firmware
+#   如果特定示例更改：只重新构建该固件
+# - Manual trigger: can choose to build all or specific firmware
+#   手动触发：可以选择构建所有或特定固件
 
 name: Build Firmware
 
@@ -18,101 +26,173 @@ on:
       - 'arduino/**'
   workflow_dispatch:  # Allow manual trigger | 允许手动触发
     inputs:
-      release:
-        description: 'Create a release with firmware binaries'
+      build_all:
+        description: 'Build all firmware (ignore change detection)'
         required: false
         default: 'false'
         type: boolean
+      firmware:
+        description: 'Specific firmware to build (leave empty for auto-detect)'
+        required: false
+        default: ''
+        type: string
 
 env:
   ARDUINO_CLI_VERSION: "0.35.3"
   ESP32_CORE_VERSION: "3.3.4"  # Lock ESP32 Core version for build consistency | 锁定 ESP32 Core 版本以确保构建一致性
 
 jobs:
-  build:
+  # Detect which firmware needs to be built | 检测需要构建的固件
+  detect-changes:
     runs-on: ubuntu-latest
-    
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # ESP32-C6 based products | 基于 ESP32-C6 的产品
-          - firmware: "IoTButtonV2_DeepSleep"
-            sketch: "arduino/SeeedHADiscovery/examples/IoTButtonV2_DeepSleep/IoTButtonV2_DeepSleep.ino"
-            board: "esp32:esp32:esp32c6"
-            board_options: "CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M,UploadSpeed=921600"
-            platform: "esp32:esp32"
-            platform_url: "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
-            
-          # ESP32-S3 based products (example) | 基于 ESP32-S3 的产品（示例）
-          - firmware: "WiFiProvisioning"
-            sketch: "arduino/SeeedHADiscovery/examples/WiFiProvisioning/WiFiProvisioning.ino"
-            board: "esp32:esp32:esp32c6"
-            board_options: "CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M,UploadSpeed=921600"
-            platform: "esp32:esp32"
-            platform_url: "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
-            
-          # Add more firmware configurations here | 在此添加更多固件配置
-          # - firmware: "CameraStream"
-          #   sketch: "arduino/SeeedHADiscovery/examples/CameraStream/CameraStream.ino"
-          #   board: "esp32:esp32:esp32s3"
-          #   board_options: "..."
-          #   platform: "esp32:esp32"
-          #   platform_url: "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
+    outputs:
+      build_iot_button: ${{ steps.check.outputs.build_iot_button }}
+      build_wifi_provisioning: ${{ steps.check.outputs.build_wifi_provisioning }}
+      library_changed: ${{ steps.check.outputs.library_changed }}
+      any_firmware_changed: ${{ steps.check.outputs.any_firmware_changed }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Need previous commit to detect changes | 需要上一个提交来检测更改
 
+      - name: Detect changed files
+        id: check
+        run: |
+          echo "Detecting changed files..."
+          
+          # For manual trigger with build_all, build everything
+          # 手动触发且 build_all 为 true 时，构建所有
+          if [ "${{ github.event.inputs.build_all }}" == "true" ]; then
+            echo "Manual trigger: building all firmware"
+            echo "build_iot_button=true" >> $GITHUB_OUTPUT
+            echo "build_wifi_provisioning=true" >> $GITHUB_OUTPUT
+            echo "library_changed=true" >> $GITHUB_OUTPUT
+            echo "any_firmware_changed=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # For manual trigger with specific firmware
+          # 手动触发指定特定固件
+          if [ -n "${{ github.event.inputs.firmware }}" ]; then
+            echo "Manual trigger: building specific firmware: ${{ github.event.inputs.firmware }}"
+            if [ "${{ github.event.inputs.firmware }}" == "IoTButtonV2_DeepSleep" ]; then
+              echo "build_iot_button=true" >> $GITHUB_OUTPUT
+              echo "build_wifi_provisioning=false" >> $GITHUB_OUTPUT
+            elif [ "${{ github.event.inputs.firmware }}" == "WiFiProvisioning" ]; then
+              echo "build_iot_button=false" >> $GITHUB_OUTPUT
+              echo "build_wifi_provisioning=true" >> $GITHUB_OUTPUT
+            fi
+            echo "library_changed=false" >> $GITHUB_OUTPUT
+            echo "any_firmware_changed=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Get changed files | 获取更改的文件
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
+          else
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only HEAD)
+          fi
+          
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+          echo ""
+          
+          # Initialize flags | 初始化标志
+          BUILD_IOT_BUTTON=false
+          BUILD_WIFI_PROVISIONING=false
+          LIBRARY_CHANGED=false
+          
+          # Check if library source changed | 检查库源码是否更改
+          if echo "$CHANGED_FILES" | grep -q "arduino/SeeedHADiscovery/src/"; then
+            echo "Library source changed - will rebuild ALL firmware"
+            LIBRARY_CHANGED=true
+            BUILD_IOT_BUTTON=true
+            BUILD_WIFI_PROVISIONING=true
+          fi
+          
+          # Check if workflow file changed | 检查工作流文件是否更改
+          if echo "$CHANGED_FILES" | grep -q ".github/workflows/build-firmware.yml"; then
+            echo "Workflow file changed - will rebuild ALL firmware"
+            BUILD_IOT_BUTTON=true
+            BUILD_WIFI_PROVISIONING=true
+          fi
+          
+          # Check specific firmware changes | 检查特定固件更改
+          if echo "$CHANGED_FILES" | grep -q "arduino/SeeedHADiscovery/examples/IoTButtonV2_DeepSleep/"; then
+            echo "IoTButtonV2_DeepSleep changed"
+            BUILD_IOT_BUTTON=true
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -q "arduino/SeeedHADiscovery/examples/WiFiProvisioning/"; then
+            echo "WiFiProvisioning changed"
+            BUILD_WIFI_PROVISIONING=true
+          fi
+          
+          # Check if any firmware needs building | 检查是否有固件需要构建
+          ANY_CHANGED=false
+          if [ "$BUILD_IOT_BUTTON" == "true" ] || [ "$BUILD_WIFI_PROVISIONING" == "true" ]; then
+            ANY_CHANGED=true
+          fi
+          
+          # Output results | 输出结果
+          echo ""
+          echo "Build decisions:"
+          echo "  - IoTButtonV2_DeepSleep: $BUILD_IOT_BUTTON"
+          echo "  - WiFiProvisioning: $BUILD_WIFI_PROVISIONING"
+          echo "  - Library changed: $LIBRARY_CHANGED"
+          echo "  - Any firmware to build: $ANY_CHANGED"
+          
+          echo "build_iot_button=$BUILD_IOT_BUTTON" >> $GITHUB_OUTPUT
+          echo "build_wifi_provisioning=$BUILD_WIFI_PROVISIONING" >> $GITHUB_OUTPUT
+          echo "library_changed=$LIBRARY_CHANGED" >> $GITHUB_OUTPUT
+          echo "any_firmware_changed=$ANY_CHANGED" >> $GITHUB_OUTPUT
+
+  # Build IoTButtonV2_DeepSleep firmware | 构建 IoTButtonV2_DeepSleep 固件
+  build-iot-button:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.build_iot_button == 'true'
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Arduino CLI
         run: |
-          # Download and install Arduino CLI manually (more reliable)
-          # 手动下载安装 Arduino CLI（更可靠）
           curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
           arduino-cli version
 
       - name: Install platform and libraries
         run: |
-          # Add board manager URL | 添加开发板管理器 URL
           arduino-cli config init
-          arduino-cli config add board_manager.additional_urls "${{ matrix.platform_url }}"
-          
-          # Update index and install platform with locked version | 更新索引并安装锁定版本的平台
+          arduino-cli config add board_manager.additional_urls "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
           arduino-cli core update-index
-          arduino-cli core install ${{ matrix.platform }}@${{ env.ESP32_CORE_VERSION }}
+          arduino-cli core install esp32:esp32@${{ env.ESP32_CORE_VERSION }}
           
-          echo "Installed ESP32 Core version: ${{ env.ESP32_CORE_VERSION }}"
-          
-          # Install required libraries | 安装所需库
           arduino-cli lib install "ArduinoJson"
           arduino-cli lib install "WebSockets"
           arduino-cli lib install "Adafruit NeoPixel"
           
-          # Install SeeedHADiscovery library from local | 从本地安装 SeeedHADiscovery 库
           mkdir -p ~/Arduino/libraries
           cp -r arduino/SeeedHADiscovery ~/Arduino/libraries/
 
-      - name: Compile firmware
+      - name: Compile IoTButtonV2_DeepSleep
         run: |
-          mkdir -p build/${{ matrix.firmware }}
-          
-          # Compile the sketch | 编译固件
+          mkdir -p build/IoTButtonV2_DeepSleep
           arduino-cli compile \
-            --fqbn "${{ matrix.board }}:${{ matrix.board_options }}" \
-            --output-dir "build/${{ matrix.firmware }}" \
+            --fqbn "esp32:esp32:esp32c6:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M,UploadSpeed=921600" \
+            --output-dir "build/IoTButtonV2_DeepSleep" \
             --export-binaries \
-            "${{ matrix.sketch }}"
+            "arduino/SeeedHADiscovery/examples/IoTButtonV2_DeepSleep/IoTButtonV2_DeepSleep.ino"
           
-          # List compiled files | 列出编译的文件
           echo "Compiled files:"
-          ls -la build/${{ matrix.firmware }}/
+          ls -la build/IoTButtonV2_DeepSleep/
 
-      - name: Prepare firmware files for ESP Web Tools
+      - name: Prepare firmware files
         run: |
-          cd build/${{ matrix.firmware }}
+          cd build/IoTButtonV2_DeepSleep
           
-          # Rename files for clarity | 重命名文件以便识别
-          # ESP32 typically outputs: sketch.ino.bin, sketch.ino.bootloader.bin, sketch.ino.partitions.bin
           for f in *.bin; do
             if [[ "$f" == *".ino.bin" ]]; then
               mv "$f" "firmware.bin"
@@ -123,79 +203,19 @@ jobs:
             fi
           done
           
-          # Copy boot_app0.bin from ESP32 Core (required for OTA boot selection)
-          # 从 ESP32 Core 复制 boot_app0.bin（OTA 启动选择所需）
-          # This file is at offset 0xe000 and is needed for proper boot sequence
-          # 此文件在偏移地址 0xe000，正确启动序列所需
+          # Copy boot_app0.bin
           ESP32_CORE_PATH=$(find ~/.arduino15/packages/esp32/hardware/esp32 -maxdepth 1 -type d -name "${{ env.ESP32_CORE_VERSION }}" | head -1)
           if [ -n "$ESP32_CORE_PATH" ] && [ -f "$ESP32_CORE_PATH/tools/partitions/boot_app0.bin" ]; then
             cp "$ESP32_CORE_PATH/tools/partitions/boot_app0.bin" ./boot_app0.bin
-            echo "✓ Copied boot_app0.bin from ESP32 Core"
           else
-            echo "⚠ Warning: boot_app0.bin not found, trying alternative path..."
-            # Alternative search | 备选搜索路径
             BOOT_APP0=$(find ~/.arduino15/packages/esp32 -name "boot_app0.bin" -type f | head -1)
-            if [ -n "$BOOT_APP0" ]; then
-              cp "$BOOT_APP0" ./boot_app0.bin
-              echo "✓ Copied boot_app0.bin from: $BOOT_APP0"
-            else
-              echo "✗ Error: boot_app0.bin not found!"
-              exit 1
-            fi
+            cp "$BOOT_APP0" ./boot_app0.bin
           fi
           
-          # List final files | 列出最终文件
-          echo "Final firmware files:"
-          ls -la
-
-      - name: Create manifest.json for ESP Web Tools
-        run: |
-          cd build/${{ matrix.firmware }}
-          
-          # Determine chip family and offsets based on board | 根据开发板确定芯片系列和偏移地址
-          # ESP32-C3/C6/S3/H2 use 0x0 for bootloader | ESP32-C3/C6/S3/H2 的 bootloader 偏移为 0x0
-          # Original ESP32/ESP32-S2 use 0x1000 | 原版 ESP32/ESP32-S2 的偏移为 0x1000
-          
-          CHIP_FAMILY="ESP32-C6"
-          BOOTLOADER_OFFSET=0
-          PARTITIONS_OFFSET=32768   # 0x8000
-          BOOT_APP0_OFFSET=57344    # 0xe000 - OTA boot selection | OTA 启动选择
-          FIRMWARE_OFFSET=65536     # 0x10000
-          
-          if [[ "${{ matrix.board }}" == *"esp32s3"* ]] || [[ "${{ matrix.board }}" == *"XIAO_ESP32S3"* ]]; then
-            CHIP_FAMILY="ESP32-S3"
-            BOOTLOADER_OFFSET=0
-          elif [[ "${{ matrix.board }}" == *"esp32s2"* ]]; then
-            CHIP_FAMILY="ESP32-S2"
-            BOOTLOADER_OFFSET=4096  # 0x1000
-          elif [[ "${{ matrix.board }}" == *"esp32c5"* ]] || [[ "${{ matrix.board }}" == *"XIAO_ESP32C5"* ]]; then
-            # ESP32-C5 uses 0x2000 for bootloader | ESP32-C5 的 bootloader 偏移为 0x2000
-            CHIP_FAMILY="ESP32-C5"
-            BOOTLOADER_OFFSET=8192  # 0x2000
-          elif [[ "${{ matrix.board }}" == *"esp32c3"* ]]; then
-            CHIP_FAMILY="ESP32-C3"
-            BOOTLOADER_OFFSET=0
-          elif [[ "${{ matrix.board }}" == *"esp32c6"* ]]; then
-            CHIP_FAMILY="ESP32-C6"
-            BOOTLOADER_OFFSET=0
-          elif [[ "${{ matrix.board }}" == *"esp32h2"* ]]; then
-            CHIP_FAMILY="ESP32-H2"
-            BOOTLOADER_OFFSET=0
-          elif [[ "${{ matrix.board }}" == *"esp32"* ]]; then
-            CHIP_FAMILY="ESP32"
-            BOOTLOADER_OFFSET=4096  # 0x1000
-          fi
-          
-          echo "Chip Family: ${CHIP_FAMILY}"
-          echo "Bootloader Offset: ${BOOTLOADER_OFFSET}"
-          echo "Boot App0 Offset: ${BOOT_APP0_OFFSET}"
-          
-          # Create manifest.json with all 4 binary files | 创建包含所有 4 个二进制文件的 manifest.json
-          # Flash layout: bootloader -> partitions -> boot_app0 -> firmware
-          # Flash 布局：bootloader -> partitions -> boot_app0 -> firmware
-          cat > manifest.json << EOF
+          # Create manifest.json
+          cat > manifest.json << 'EOF'
           {
-            "name": "${{ matrix.firmware }}",
+            "name": "IoTButtonV2_DeepSleep",
             "version": "1.0.0",
             "home_assistant_domain": "seeed_ha_discovery",
             "funding_url": "https://www.seeedstudio.com/",
@@ -203,31 +223,128 @@ jobs:
             "new_install_improv_wait_time": 0,
             "builds": [
               {
-                "chipFamily": "${CHIP_FAMILY}",
+                "chipFamily": "ESP32-C6",
                 "parts": [
-                  { "path": "bootloader.bin", "offset": ${BOOTLOADER_OFFSET} },
-                  { "path": "partitions.bin", "offset": ${PARTITIONS_OFFSET} },
-                  { "path": "boot_app0.bin", "offset": ${BOOT_APP0_OFFSET} },
-                  { "path": "firmware.bin", "offset": ${FIRMWARE_OFFSET} }
+                  { "path": "bootloader.bin", "offset": 0 },
+                  { "path": "partitions.bin", "offset": 32768 },
+                  { "path": "boot_app0.bin", "offset": 57344 },
+                  { "path": "firmware.bin", "offset": 65536 }
                 ]
               }
             ]
           }
           EOF
           
-          echo "Created manifest.json:"
-          cat manifest.json
+          echo "Final files:"
+          ls -la
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-${{ matrix.firmware }}
-          path: build/${{ matrix.firmware }}/
+          name: firmware-IoTButtonV2_DeepSleep
+          path: build/IoTButtonV2_DeepSleep/
           retention-days: 30
 
-  # Combine all firmware into one artifact | 将所有固件合并到一个 artifact
+  # Build WiFiProvisioning firmware | 构建 WiFiProvisioning 固件
+  build-wifi-provisioning:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.build_wifi_provisioning == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Arduino CLI
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
+          arduino-cli version
+
+      - name: Install platform and libraries
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32@${{ env.ESP32_CORE_VERSION }}
+          
+          arduino-cli lib install "ArduinoJson"
+          arduino-cli lib install "WebSockets"
+          arduino-cli lib install "Adafruit NeoPixel"
+          
+          mkdir -p ~/Arduino/libraries
+          cp -r arduino/SeeedHADiscovery ~/Arduino/libraries/
+
+      - name: Compile WiFiProvisioning
+        run: |
+          mkdir -p build/WiFiProvisioning
+          arduino-cli compile \
+            --fqbn "esp32:esp32:esp32c6:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M,UploadSpeed=921600" \
+            --output-dir "build/WiFiProvisioning" \
+            --export-binaries \
+            "arduino/SeeedHADiscovery/examples/WiFiProvisioning/WiFiProvisioning.ino"
+          
+          echo "Compiled files:"
+          ls -la build/WiFiProvisioning/
+
+      - name: Prepare firmware files
+        run: |
+          cd build/WiFiProvisioning
+          
+          for f in *.bin; do
+            if [[ "$f" == *".ino.bin" ]]; then
+              mv "$f" "firmware.bin"
+            elif [[ "$f" == *".bootloader.bin" ]]; then
+              mv "$f" "bootloader.bin"
+            elif [[ "$f" == *".partitions.bin" ]]; then
+              mv "$f" "partitions.bin"
+            fi
+          done
+          
+          # Copy boot_app0.bin
+          ESP32_CORE_PATH=$(find ~/.arduino15/packages/esp32/hardware/esp32 -maxdepth 1 -type d -name "${{ env.ESP32_CORE_VERSION }}" | head -1)
+          if [ -n "$ESP32_CORE_PATH" ] && [ -f "$ESP32_CORE_PATH/tools/partitions/boot_app0.bin" ]; then
+            cp "$ESP32_CORE_PATH/tools/partitions/boot_app0.bin" ./boot_app0.bin
+          else
+            BOOT_APP0=$(find ~/.arduino15/packages/esp32 -name "boot_app0.bin" -type f | head -1)
+            cp "$BOOT_APP0" ./boot_app0.bin
+          fi
+          
+          # Create manifest.json
+          cat > manifest.json << 'EOF'
+          {
+            "name": "WiFiProvisioning",
+            "version": "1.0.0",
+            "home_assistant_domain": "seeed_ha_discovery",
+            "funding_url": "https://www.seeedstudio.com/",
+            "new_install_prompt_erase": true,
+            "new_install_improv_wait_time": 0,
+            "builds": [
+              {
+                "chipFamily": "ESP32-C6",
+                "parts": [
+                  { "path": "bootloader.bin", "offset": 0 },
+                  { "path": "partitions.bin", "offset": 32768 },
+                  { "path": "boot_app0.bin", "offset": 57344 },
+                  { "path": "firmware.bin", "offset": 65536 }
+                ]
+              }
+            ]
+          }
+          EOF
+          
+          echo "Final files:"
+          ls -la
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-WiFiProvisioning
+          path: build/WiFiProvisioning/
+          retention-days: 30
+
+  # Combine all built firmware | 合并所有构建的固件
   combine:
-    needs: build
+    needs: [detect-changes, build-iot-button, build-wifi-provisioning]
+    if: always() && needs.detect-changes.outputs.any_firmware_changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Download all firmware artifacts
@@ -235,17 +352,30 @@ jobs:
         with:
           path: all-firmware/
           pattern: firmware-*
+        continue-on-error: true  # Some artifacts may not exist | 某些 artifact 可能不存在
+
+      - name: Check downloaded artifacts
+        run: |
+          echo "Downloaded artifacts:"
+          ls -la all-firmware/ 2>/dev/null || echo "No artifacts directory"
+          find all-firmware -type f 2>/dev/null || echo "No files found"
 
       - name: Reorganize firmware files
         run: |
           mkdir -p combined-firmware
-          for dir in all-firmware/firmware-*; do
-            firmware_name=$(basename "$dir" | sed 's/firmware-//')
-            cp -r "$dir" "combined-firmware/$firmware_name"
-          done
+          
+          if [ -d "all-firmware" ]; then
+            for dir in all-firmware/firmware-*; do
+              if [ -d "$dir" ]; then
+                firmware_name=$(basename "$dir" | sed 's/firmware-//')
+                echo "Adding firmware: $firmware_name"
+                cp -r "$dir" "combined-firmware/$firmware_name"
+              fi
+            done
+          fi
           
           echo "Combined firmware structure:"
-          find combined-firmware -type f
+          find combined-firmware -type f 2>/dev/null || echo "No firmware files"
 
       - name: Upload combined firmware
         uses: actions/upload-artifact@v4
@@ -253,55 +383,50 @@ jobs:
           name: all-firmware
           path: combined-firmware/
           retention-days: 90
+        if: hashFiles('combined-firmware/**') != ''
 
-  # Create release (when manually triggered with release=true) | 创建发布版本（手动触发且 release=true 时）
+  # Create release | 创建发布版本
   release:
-    needs: combine
-    if: github.event.inputs.release == 'true' || github.ref == 'refs/heads/main'
+    needs: [detect-changes, combine]
+    if: always() && needs.detect-changes.outputs.any_firmware_changed == 'true' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for changelog | 完整历史用于更新日志
 
       - name: Download combined firmware
         uses: actions/download-artifact@v4
         with:
           name: all-firmware
           path: firmware/
+        continue-on-error: true
 
-      - name: Create firmware index
+      - name: Check firmware exists
+        id: check_firmware
         run: |
-          cd firmware
-          
-          # Create index.json listing all available firmware | 创建列出所有可用固件的 index.json
-          echo '[' > index.json
-          first=true
-          for dir in */; do
-            firmware_name="${dir%/}"
-            if [ "$first" = true ]; then
-              first=false
-            else
-              echo ',' >> index.json
-            fi
-            echo "  {\"name\": \"$firmware_name\", \"manifest\": \"$firmware_name/manifest.json\"}" >> index.json
-          done
-          echo ']' >> index.json
-          
-          echo "Created index.json:"
-          cat index.json
+          if [ -d "firmware" ] && [ "$(ls -A firmware 2>/dev/null)" ]; then
+            echo "has_firmware=true" >> $GITHUB_OUTPUT
+            echo "Firmware directory contents:"
+            find firmware -type f
+          else
+            echo "has_firmware=false" >> $GITHUB_OUTPUT
+            echo "No firmware to release"
+          fi
 
       - name: Get version and changelog
         id: version
+        if: steps.check_firmware.outputs.has_firmware == 'true'
         run: |
           VERSION=$(date +'%Y.%m.%d')-$(git rev-parse --short HEAD)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           
-          # Get the last release tag (if exists) | 获取上一个 release 标签（如果存在）
+          # Get the last release tag
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           
-          # Generate changelog | 生成更新日志
           echo "Generating changelog..."
           if [ -n "$LAST_TAG" ]; then
             echo "Changes since $LAST_TAG:"
@@ -311,16 +436,12 @@ jobs:
             CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
           fi
           
-          # Save changelog to file (to handle multiline in GitHub Actions)
-          # 保存更新日志到文件（处理 GitHub Actions 中的多行）
           echo "$CHANGELOG" > changelog.txt
-          echo "Changelog generated:"
           cat changelog.txt
 
-      - name: Package firmware for release
+      - name: Package firmware
+        if: steps.check_firmware.outputs.has_firmware == 'true'
         run: |
-          # Create zip files for each firmware to avoid filename conflicts
-          # 为每个固件创建 zip 文件以避免文件名冲突
           cd firmware
           
           for dir in */; do
@@ -329,7 +450,6 @@ jobs:
             zip -r "${firmware_name}.zip" "$dir"
           done
           
-          # Also create a combined zip with all firmware | 同时创建包含所有固件的合并 zip
           cd ..
           zip -r "all-firmware.zip" firmware/
           mv all-firmware.zip firmware/
@@ -338,13 +458,20 @@ jobs:
           ls -la firmware/*.zip
 
       - name: Generate release body
-        id: release_body
+        if: steps.check_firmware.outputs.has_firmware == 'true'
         run: |
-          # Read changelog | 读取更新日志
           CHANGELOG=$(cat changelog.txt)
           
-          # Create release body | 创建发布说明
-          cat > release_body.md << 'ENDOFHEADER'
+          # List which firmware was built | 列出构建了哪些固件
+          BUILT_FIRMWARE=""
+          for dir in firmware/*/; do
+            firmware_name=$(basename "$dir")
+            if [ "$firmware_name" != "*.zip" ]; then
+              BUILT_FIRMWARE="$BUILT_FIRMWARE\n- $firmware_name"
+            fi
+          done
+          
+          cat > release_body.md << ENDOFHEADER
           ## 🚀 Firmware Release
           
           Pre-compiled firmware for Seeed HA Discovery devices.
@@ -356,27 +483,12 @@ jobs:
           Visit [Web Flasher](https://limengdu.github.io/Seeed-Homeassistant-Discovery/flasher/) to flash directly from browser.
           访问 [网页烧录器](https://limengdu.github.io/Seeed-Homeassistant-Discovery/flasher/) 直接从浏览器烧录。
           
-          ### 📦 Included Firmware | 包含的固件
-          
-          | Firmware | Chip | Description |
-          |----------|------|-------------|
-          | IoTButtonV2_DeepSleep | ESP32-C6 | Low-power IoT button with deep sleep |
-          | WiFiProvisioning | ESP32-C6 | WiFi provisioning demo |
-          
-          ### 📁 Downloads | 下载
-          
-          - `all-firmware.zip` - All firmware in one package | 所有固件合集
-          - Individual firmware zip files available below | 单独固件 zip 文件如下
+          ### 📦 Firmware in this release | 本次发布的固件
+          $(echo -e "$BUILT_FIRMWARE")
           
           ### 📝 Changelog | 更新日志
           
-          ENDOFHEADER
-          
-          # Append changelog | 添加更新日志
-          echo "$CHANGELOG" >> release_body.md
-          
-          # Add build info | 添加构建信息
-          cat >> release_body.md << ENDOFFOOTER
+          $CHANGELOG
           
           ---
           
@@ -384,12 +496,12 @@ jobs:
           - ESP32 Core Version: ${{ env.ESP32_CORE_VERSION }}
           - Build Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
           - Commit: ${{ github.sha }}
-          ENDOFFOOTER
+          ENDOFHEADER
           
-          echo "Release body generated:"
           cat release_body.md
 
       - name: Create Release
+        if: steps.check_firmware.outputs.has_firmware == 'true'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: firmware-${{ steps.version.outputs.version }}
@@ -397,4 +509,3 @@ jobs:
           body_path: release_body.md
           files: |
             firmware/*.zip
-
