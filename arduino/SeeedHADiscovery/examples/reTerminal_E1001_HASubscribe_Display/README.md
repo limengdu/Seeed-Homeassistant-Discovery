@@ -4,6 +4,7 @@ Display Home Assistant entity states on the reTerminal E1001's 4-level grayscale
 
 ## Features
 
+- **Web-based WiFi Provisioning (Captive Portal)** - No hardcoded WiFi credentials needed
 - Subscribe to any Home Assistant entities
 - 4-level grayscale E-Paper display (800x480)
 - Clean monochrome dashboard UI
@@ -11,11 +12,15 @@ Display Home Assistant entity states on the reTerminal E1001's 4-level grayscale
 - Automatic display refresh
 - Connection status indicator
 - Smart refresh logic (avoids unnecessary updates)
+- **GPIO3 Reset Button** - Long press 6s to clear WiFi credentials
+- **GPIO6 Status LED** - Visual feedback indicator
 
 ## Hardware Requirements
 
 - **reTerminal E1001** with 4-level grayscale E-Paper display
 - Display resolution: 800x480
+- GPIO3: Reset button (long press 6s to reset WiFi)
+- GPIO6: Status LED (active LOW)
 
 ## Supported Colors
 
@@ -44,18 +49,23 @@ Install manually from [GitHub](https://github.com/limengdu/SeeedHADiscovery).
 
 ## Quick Start
 
-### 1. Configure WiFi
-
-```cpp
-const char* WIFI_SSID = "your-wifi-ssid";
-const char* WIFI_PASSWORD = "your-wifi-password";
-```
-
-### 2. Upload
+### 1. Upload Firmware
 
 1. Select board for reTerminal E1001
 2. Ensure `EPAPER_ENABLE` is defined in User_Setup.h
 3. Upload the sketch
+
+### 2. WiFi Provisioning
+
+On first boot (or after reset), the device enters provisioning mode:
+
+1. E-Paper displays provisioning screen with instructions
+2. Connect your phone/computer to WiFi: **reTerminal_E1001_AP**
+3. Open browser and visit: **http://192.168.4.1**
+4. Select your WiFi network and enter password
+5. Device auto-connects and displays IP address
+
+> **Reset WiFi**: Long press GPIO3 button for 6 seconds, LED flashes rapidly, release to reset
 
 ### 3. Configure in Home Assistant
 
@@ -63,6 +73,17 @@ const char* WIFI_PASSWORD = "your-wifi-password";
 2. Click **Configure**
 3. Select entities to subscribe (max 6)
 4. Save - display will update automatically
+
+### Alternative: Hardcoded WiFi (Optional)
+
+If you prefer not to use provisioning, modify the code:
+
+```cpp
+#define USE_WIFI_PROVISIONING false  // Disable provisioning
+
+const char* WIFI_SSID = "your-wifi-ssid";
+const char* WIFI_PASSWORD = "your-wifi-password";
+```
 
 ## Display Layout
 
@@ -93,9 +114,22 @@ const char* WIFI_PASSWORD = "your-wifi-password";
 
 | Option | Default | Description |
 |--------|---------|-------------|
+| `USE_WIFI_PROVISIONING` | true | Enable web-based WiFi provisioning |
+| `AP_SSID` | reTerminal_E1001_AP | AP hotspot name for provisioning |
+| `PIN_RESET_BUTTON` | 3 | Reset button pin |
+| `PIN_STATUS_LED` | 6 | Status LED pin |
 | `DISPLAY_REFRESH_INTERVAL` | 300000ms | Periodic refresh (5 min) |
 | `DATA_COLLECTION_WAIT` | 5000ms | Wait time before initial refresh |
 | `MAX_DISPLAY_ENTITIES` | 6 | Maximum entities shown |
+
+## LED Status Indicators
+
+| Status | LED Behavior |
+|--------|--------------|
+| Boot | Quick flash 2 times |
+| Enter provisioning mode | Slow flash 3 times |
+| WiFi connected | Quick flash 3-5 times |
+| Reset button held 6s | Quick flash 5 times, then stays on |
 
 ## Serial Output
 

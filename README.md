@@ -479,6 +479,9 @@ Both WiFi and BLE devices can subscribe to Home Assistant entity states, which i
 | `setDeviceInfo(name, model, version)` | Set device information |
 | `enableDebug(enable)` | Enable debug output |
 | `begin(ssid, password)` | Connect to WiFi and start service |
+| `beginWithProvisioning(apName)` | Enable web-based WiFi provisioning mode |
+| `enableResetButton(pin)` | Enable reset button (long press 6s to clear credentials) |
+| `clearWiFiCredentials()` | Clear saved WiFi credentials |
 | `addSensor(id, name, deviceClass, unit)` | Add sensor (upstream data) |
 | `addSwitch(id, name, icon)` | Add switch (downstream control) |
 | `handle()` | Handle network events (must call in loop) |
@@ -620,7 +623,9 @@ seeed-ha-discovery/
 │   │   │   ├── TemperatureHumidity/  # Temperature/Humidity sensor example
 │   │   │   ├── LEDSwitch/            # LED switch example
 │   │   │   ├── ButtonSwitch/         # Button switch example (v1.2)
-│   │   │   └── CameraStream/         # Camera streaming example (v1.3)
+│   │   │   ├── CameraStream/         # Camera streaming example (v1.3)
+│   │   │   ├── IoTButtonV2_DeepSleep/  # IoT Button V2 deep sleep example
+│   │   │   └── reTerminal_E1001_HASubscribe_Display/  # reTerminal E1001 E-Paper example (WiFi provisioning)
 │   │   ├── library.json
 │   │   └── library.properties
 │   └── SeeedHADiscoveryBLE/      # BLE Arduino Library (v2.0 New)

@@ -479,6 +479,9 @@ WiFi 和 BLE 设备都可以订阅 Home Assistant 中的实体状态，这对于
 | `setDeviceInfo(name, model, version)` | 设置设备信息 |
 | `enableDebug(enable)` | 启用调试输出 |
 | `begin(ssid, password)` | 连接 WiFi 并启动服务 |
+| `beginWithProvisioning(apName)` | 启用网页配网模式 |
+| `enableResetButton(pin)` | 启用重置按钮（长按6秒清除凭据）|
+| `clearWiFiCredentials()` | 清除已保存的 WiFi 凭据 |
 | `addSensor(id, name, deviceClass, unit)` | 添加传感器（上行数据）|
 | `addSwitch(id, name, icon)` | 添加开关（下行控制）|
 | `handle()` | 处理网络事件（必须在 loop 中调用）|
@@ -620,7 +623,9 @@ seeed-ha-discovery/
 │   │   │   ├── TemperatureHumidity/  # 温湿度传感器示例
 │   │   │   ├── LEDSwitch/            # LED 开关示例
 │   │   │   ├── ButtonSwitch/         # 按钮开关示例 (v1.1)
-│   │   │   └── CameraStream/         # 摄像头推流示例 (v1.3)
+│   │   │   ├── CameraStream/         # 摄像头推流示例 (v1.3)
+│   │   │   ├── IoTButtonV2_DeepSleep/  # IoT Button V2 深睡眠示例
+│   │   │   └── reTerminal_E1001_HASubscribe_Display/  # reTerminal E1001 墨水屏示例 (WiFi 配网)
 │   │   ├── library.json
 │   │   └── library.properties
 │   └── SeeedHADiscoveryBLE/      # BLE Arduino 库 (v2.0 新增)
