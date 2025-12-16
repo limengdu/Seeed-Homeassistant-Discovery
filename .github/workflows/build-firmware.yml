@@ -40,6 +40,10 @@ on:
 env:
   ARDUINO_CLI_VERSION: "0.35.3"
   ESP32_CORE_VERSION: "3.3.4"  # Lock ESP32 Core version for build consistency | 锁定 ESP32 Core 版本以确保构建一致性
+  # Library versions (locked for build stability) | 库版本（锁定以确保构建稳定性）
+  ARDUINOJSON_VERSION: "7.4.2"
+  WEBSOCKETS_VERSION: "2.7.1"
+  NEOPIXEL_VERSION: "1.15.2"
 
 jobs:
   # Detect which firmware needs to be built | 检测需要构建的固件
@@ -170,9 +174,13 @@ jobs:
           arduino-cli core update-index
           arduino-cli core install esp32:esp32@${{ env.ESP32_CORE_VERSION }}
           
-          arduino-cli lib install "ArduinoJson"
-          arduino-cli lib install "WebSockets"
-          arduino-cli lib install "Adafruit NeoPixel"
+          # Install libraries with locked versions | 安装锁定版本的库
+          arduino-cli lib install "ArduinoJson@${{ env.ARDUINOJSON_VERSION }}"
+          arduino-cli lib install "WebSockets@${{ env.WEBSOCKETS_VERSION }}"
+          arduino-cli lib install "Adafruit NeoPixel@${{ env.NEOPIXEL_VERSION }}"
+          
+          echo "Installed library versions:"
+          arduino-cli lib list
           
           mkdir -p ~/Arduino/libraries
           cp -r arduino/SeeedHADiscovery ~/Arduino/libraries/
@@ -266,9 +274,13 @@ jobs:
           arduino-cli core update-index
           arduino-cli core install esp32:esp32@${{ env.ESP32_CORE_VERSION }}
           
-          arduino-cli lib install "ArduinoJson"
-          arduino-cli lib install "WebSockets"
-          arduino-cli lib install "Adafruit NeoPixel"
+          # Install libraries with locked versions | 安装锁定版本的库
+          arduino-cli lib install "ArduinoJson@${{ env.ARDUINOJSON_VERSION }}"
+          arduino-cli lib install "WebSockets@${{ env.WEBSOCKETS_VERSION }}"
+          arduino-cli lib install "Adafruit NeoPixel@${{ env.NEOPIXEL_VERSION }}"
+          
+          echo "Installed library versions:"
+          arduino-cli lib list
           
           mkdir -p ~/Arduino/libraries
           cp -r arduino/SeeedHADiscovery ~/Arduino/libraries/
@@ -493,7 +505,10 @@ jobs:
           ---
           
           **Build Info | 构建信息:**
-          - ESP32 Core Version: ${{ env.ESP32_CORE_VERSION }}
+          - ESP32 Core: ${{ env.ESP32_CORE_VERSION }}
+          - ArduinoJson: ${{ env.ARDUINOJSON_VERSION }}
+          - WebSockets: ${{ env.WEBSOCKETS_VERSION }}
+          - Adafruit NeoPixel: ${{ env.NEOPIXEL_VERSION }}
           - Build Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
           - Commit: ${{ github.sha }}
           ENDOFHEADER
