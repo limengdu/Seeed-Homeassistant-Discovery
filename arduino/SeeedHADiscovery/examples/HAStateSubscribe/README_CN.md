@@ -19,8 +19,10 @@
 
 ## 硬件要求
 
-- XIAO ESP32-C3/C6/S3 或其他 ESP32 开发板
+- XIAO ESP32-C3/C5/C6/S3 或其他 ESP32 开发板
 - 可选：用于显示状态的屏幕
+
+> **注意**：XIAO ESP32-C5 支持 2.4GHz 和 5GHz 双频 WiFi
 
 ## 软件依赖
 

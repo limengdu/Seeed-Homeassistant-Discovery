@@ -12,8 +12,10 @@ A multi-click button detection example that creates three independent switches i
 
 ## Hardware Requirements
 
-- XIAO ESP32-C3/C6/S3 or other ESP32 development boards
+- XIAO ESP32-C3/C5/C6/S3 or other ESP32 development boards
 - Button (with internal or external pull-up resistor)
+
+> **Note**: XIAO ESP32-C5 supports both 2.4GHz and 5GHz dual-band WiFi
 
 ### Button Wiring
 

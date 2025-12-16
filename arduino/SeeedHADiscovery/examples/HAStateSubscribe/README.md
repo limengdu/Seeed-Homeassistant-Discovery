@@ -19,8 +19,10 @@ Receive and display entity states from Home Assistant on your device. Perfect fo
 
 ## Hardware Requirements
 
-- XIAO ESP32-C3/C6/S3 or other ESP32 development boards
+- XIAO ESP32-C3/C5/C6/S3 or other ESP32 development boards
 - Optional: Display for showing states
+
+> **Note**: XIAO ESP32-C5 supports both 2.4GHz and 5GHz dual-band WiFi
 
 ## Software Dependencies
 

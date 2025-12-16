@@ -12,8 +12,10 @@
 
 ## 硬件要求
 
-- XIAO ESP32-C3/C6/S3 或其他 ESP32 开发板
+- XIAO ESP32-C3/C5/C6/S3 或其他 ESP32 开发板
 - DHT22 传感器（可选 - 可使用模拟数据）
+
+> **注意**：XIAO ESP32-C5 支持 2.4GHz 和 5GHz 双频 WiFi
 
 ### DHT22 接线
 

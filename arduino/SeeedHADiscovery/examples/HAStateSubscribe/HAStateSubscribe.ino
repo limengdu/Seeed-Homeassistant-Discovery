@@ -52,7 +52,9 @@
  *
  * Hardware:
  * 硬件：
- * - XIAO ESP32-C3, ESP32-C6, or ESP32-S3
+ * - XIAO ESP32-C3, ESP32-C5, ESP32-C6, or ESP32-S3
+ * - Note: XIAO ESP32-C5 supports both 2.4GHz and 5GHz WiFi
+ *   注意：XIAO ESP32-C5 支持 2.4GHz 和 5GHz 双频 WiFi
  *
  * @author Seeed Studio
  * @version 1.0.0
@@ -65,8 +67,26 @@
 // =============================================================================
 
 // WiFi credentials | WiFi 凭据
+// Note: XIAO ESP32-C5 supports both 2.4GHz and 5GHz WiFi networks
+// 注意：XIAO ESP32-C5 支持 2.4GHz 和 5GHz 双频 WiFi 网络
 const char* WIFI_SSID = "your-wifi-ssid";       // Your WiFi name | 你的 WiFi 名称
 const char* WIFI_PASSWORD = "your-wifi-password"; // Your WiFi password | 你的 WiFi 密码
+
+// =============================================================================
+// WiFi Band Mode Configuration (ESP32-C5 only) | WiFi 频段配置（仅 ESP32-C5）
+// =============================================================================
+// ESP32-C5 supports 5GHz WiFi. You can force a specific band mode.
+// ESP32-C5 支持 5GHz WiFi，你可以强制指定频段模式。
+// Requires Arduino ESP32 Core 3.3.0+ (ESP-IDF 5.4.2+)
+// 需要 Arduino ESP32 Core 3.3.0+ (ESP-IDF 5.4.2+)
+//
+// Available modes | 可用模式:
+// - WIFI_BAND_MODE_AUTO   : Auto select (default) | 自动选择（默认）
+// - WIFI_BAND_MODE_2G_ONLY: 2.4GHz only | 仅 2.4GHz
+// - WIFI_BAND_MODE_5G_ONLY: 5GHz only (C5 only) | 仅 5GHz（仅 C5）
+//
+// Uncomment to enable band mode selection | 取消注释以启用频段选择:
+// #define WIFI_BAND_MODE WIFI_BAND_MODE_AUTO
 
 // =============================================================================
 // Global Variables | 全局变量
@@ -131,6 +151,15 @@ void setup() {
         Serial.println("=====================================");
         Serial.println();
     });
+
+    // Set WiFi band mode for ESP32-C5 (optional)
+    // 为 ESP32-C5 设置 WiFi 频段模式（可选）
+    #if defined(WIFI_BAND_MODE) && defined(CONFIG_SOC_WIFI_SUPPORT_5G)
+        #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 2)
+            WiFi.setBandMode(WIFI_BAND_MODE);
+            Serial.println("WiFi band mode configured (ESP32-C5 5GHz support)");
+        #endif
+    #endif
 
     // Connect to WiFi and start services | 连接 WiFi 并启动服务
     if (!ha.begin(WIFI_SSID, WIFI_PASSWORD)) {

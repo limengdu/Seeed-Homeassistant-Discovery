@@ -11,8 +11,10 @@
 
 ## 硬件要求
 
-- XIAO ESP32-C3/C6/S3 或其他 ESP32 开发板
+- XIAO ESP32-C3/C5/C6/S3 或其他 ESP32 开发板
 - LED（板载或外接）
+
+> **注意**：XIAO ESP32-C5 支持 2.4GHz 和 5GHz 双频 WiFi
 
 ### LED 引脚参考
 
@@ -21,6 +23,7 @@
 | XIAO ESP32-S3 | GPIO21 | 有用户 LED |
 | XIAO ESP32-C6 | GPIO15 | 有用户 LED |
 | XIAO ESP32-C3 | 无 | **没有用户 LED** - 需要外接 LED |
+| XIAO ESP32-C5 | GPIO27 | 有用户 LED，支持 5GHz WiFi |
 
 ### 外接 LED 接线
 

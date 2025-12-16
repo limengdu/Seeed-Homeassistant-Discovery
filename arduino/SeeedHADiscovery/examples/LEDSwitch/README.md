@@ -11,8 +11,10 @@ Control an LED from Home Assistant via WiFi. This example demonstrates basic swi
 
 ## Hardware Requirements
 
-- XIAO ESP32-C3/C6/S3 or other ESP32 development boards
+- XIAO ESP32-C3/C5/C6/S3 or other ESP32 development boards
 - LED (onboard or external)
+
+> **Note**: XIAO ESP32-C5 supports both 2.4GHz and 5GHz dual-band WiFi
 
 ### LED Pin Reference
 
@@ -21,6 +23,7 @@ Control an LED from Home Assistant via WiFi. This example demonstrates basic swi
 | XIAO ESP32-S3 | GPIO21 | Has User LED |
 | XIAO ESP32-C6 | GPIO15 | Has User LED |
 | XIAO ESP32-C3 | N/A | **No User LED** - requires external LED |
+| XIAO ESP32-C5 | GPIO27 | Has User LED, supports 5GHz WiFi |
 
 ### External LED Wiring
 

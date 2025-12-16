@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/ESP32-C3%20%7C%20C6%20%7C%20S3-blue" alt="ESP32 Support">
+  <img src="https://img.shields.io/badge/ESP32-C3%20%7C%20C5%20%7C%20C6%20%7C%20S3-blue" alt="ESP32 Support">
   <img src="https://img.shields.io/badge/nRF52840-BLE-purple" alt="nRF52840 Support">
   <img src="https://img.shields.io/badge/Home%20Assistant-2025.12+-green" alt="Home Assistant">
   <img src="https://img.shields.io/badge/Arduino-IDE%20%7C%20PlatformIO-orange" alt="Arduino">
@@ -20,8 +20,10 @@ With just a few lines of code in **Arduino IDE** or **PlatformIO** for your **XI
 
 | Connection | Supported Devices | Features |
 |------------|-------------------|----------|
-| 📶 **WiFi** | XIAO ESP32-C3/C6/S3 | Bidirectional communication, WebSocket real-time updates |
-| 📡 **Bluetooth (BLE)** | XIAO ESP32-C3/C6/S3, **XIAO nRF52840** | Ultra-low power, BTHome v2 protocol, passive advertising |
+| 📶 **WiFi** | XIAO ESP32-C3/C5/C6/S3 | Bidirectional communication, WebSocket real-time updates |
+| 📡 **Bluetooth (BLE)** | XIAO ESP32-C3/C5/C6/S3, **XIAO nRF52840** | Ultra-low power, BTHome v2 protocol, passive advertising |
+
+> 📡 **XIAO ESP32-C5** supports both 2.4GHz and 5GHz dual-band WiFi for better connectivity options
 
 | Feature | Direction | WiFi | BLE |
 |---------|-----------|------|-----|
@@ -613,6 +615,7 @@ seeed-ha-discovery/
 | Development Board | WiFi | BLE | Camera | Status |
 |-------------------|------|-----|--------|--------|
 | XIAO ESP32-C3 | ✅ | ✅ | ❌ | Tested |
+| **XIAO ESP32-C5** | ✅ | ✅ | ❌ | Tested (5GHz WiFi) |
 | XIAO ESP32-C6 | ✅ | ✅ | ❌ | Tested |
 | XIAO ESP32-S3 | ✅ | ✅ | ❌ | Tested |
 | **XIAO ESP32-S3 Sense** | ✅ | ✅ | ✅ | Tested |
@@ -620,6 +623,8 @@ seeed-ha-discovery/
 | ESP32 (Original) | ✅ | ✅ | ❌ | Tested |
 
 > 📷 **Camera feature** only supports **XIAO ESP32-S3 Sense** with OV2640 camera module
+>
+> 📡 **XIAO ESP32-C5** is the only XIAO that supports **5GHz WiFi**, offering better performance in congested 2.4GHz environments
 
 ## 📝 Communication Protocols
 

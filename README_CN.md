@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/ESP32-C3%20%7C%20C6%20%7C%20S3-blue" alt="ESP32 Support">
+  <img src="https://img.shields.io/badge/ESP32-C3%20%7C%20C5%20%7C%20C6%20%7C%20S3-blue" alt="ESP32 Support">
   <img src="https://img.shields.io/badge/nRF52840-BLE-purple" alt="nRF52840 Support">
   <img src="https://img.shields.io/badge/Home%20Assistant-2025.12+-green" alt="Home Assistant">
   <img src="https://img.shields.io/badge/Arduino-IDE%20%7C%20PlatformIO-orange" alt="Arduino">
@@ -20,8 +20,10 @@
 
 | 连接方式 | 支持设备 | 特点 |
 |----------|----------|------|
-| 📶 **WiFi** | XIAO ESP32-C3/C6/S3 | 双向通信、WebSocket 实时更新 |
-| 📡 **蓝牙 (BLE)** | XIAO ESP32-C3/C6/S3, **XIAO nRF52840** | 超低功耗、BTHome v2 协议、被动广播 |
+| 📶 **WiFi** | XIAO ESP32-C3/C5/C6/S3 | 双向通信、WebSocket 实时更新 |
+| 📡 **蓝牙 (BLE)** | XIAO ESP32-C3/C5/C6/S3, **XIAO nRF52840** | 超低功耗、BTHome v2 协议、被动广播 |
+
+> 📡 **XIAO ESP32-C5** 支持 2.4GHz 和 5GHz 双频 WiFi，提供更好的连接选项
 
 | 功能 | 方向 | WiFi | BLE |
 |------|------|------|-----|
@@ -613,6 +615,7 @@ seeed-ha-discovery/
 | 开发板 | WiFi | BLE | 摄像头 | 状态 |
 |--------|------|-----|--------|------|
 | XIAO ESP32-C3 | ✅ | ✅ | ❌ | 已测试 |
+| **XIAO ESP32-C5** | ✅ | ✅ | ❌ | 已测试（5GHz WiFi） |
 | XIAO ESP32-C6 | ✅ | ✅ | ❌ | 已测试 |
 | XIAO ESP32-S3 | ✅ | ✅ | ❌ | 已测试 |
 | **XIAO ESP32-S3 Sense** | ✅ | ✅ | ✅ | 已测试 |
@@ -620,6 +623,8 @@ seeed-ha-discovery/
 | ESP32 (原版) | ✅ | ✅ | ❌ | 已测试 |
 
 > 📷 **摄像头功能**仅支持带 OV2640 摄像头模块的 **XIAO ESP32-S3 Sense**
+>
+> 📡 **XIAO ESP32-C5** 是唯一支持 **5GHz WiFi** 的 XIAO，在 2.4GHz 拥挤的环境中提供更好的性能
 
 ## 📝 通信协议
 
