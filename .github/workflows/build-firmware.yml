@@ -1,0 +1,288 @@
+# GitHub Actions workflow for compiling Arduino firmware
+# 用于编译 Arduino 固件的 GitHub Actions 工作流
+#
+# This workflow automatically compiles all firmware examples for different boards
+# and creates releases with the compiled binaries for web flashing.
+# 此工作流自动为不同开发板编译所有固件示例，并创建包含编译好的二进制文件的发布版本，用于网页烧录。
+
+name: Build Firmware
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'arduino/**'
+      - '.github/workflows/build-firmware.yml'
+  pull_request:
+    paths:
+      - 'arduino/**'
+  workflow_dispatch:  # Allow manual trigger | 允许手动触发
+    inputs:
+      release:
+        description: 'Create a release with firmware binaries'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  ARDUINO_CLI_VERSION: "0.35.3"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ESP32-C6 based products | 基于 ESP32-C6 的产品
+          - firmware: "IoTButtonV2_DeepSleep"
+            sketch: "arduino/SeeedHADiscovery/examples/IoTButtonV2_DeepSleep/IoTButtonV2_DeepSleep.ino"
+            board: "esp32:esp32:esp32c6"
+            board_options: "CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M,UploadSpeed=921600"
+            platform: "esp32:esp32"
+            platform_url: "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
+            
+          # ESP32-S3 based products (example) | 基于 ESP32-S3 的产品（示例）
+          - firmware: "WiFiProvisioning"
+            sketch: "arduino/SeeedHADiscovery/examples/WiFiProvisioning/WiFiProvisioning.ino"
+            board: "esp32:esp32:esp32c6"
+            board_options: "CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M,UploadSpeed=921600"
+            platform: "esp32:esp32"
+            platform_url: "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
+            
+          # Add more firmware configurations here | 在此添加更多固件配置
+          # - firmware: "CameraStream"
+          #   sketch: "arduino/SeeedHADiscovery/examples/CameraStream/CameraStream.ino"
+          #   board: "esp32:esp32:esp32s3"
+          #   board_options: "..."
+          #   platform: "esp32:esp32"
+          #   platform_url: "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Arduino CLI
+        uses: arduino/setup-arduino-cli@v1
+        with:
+          version: ${{ env.ARDUINO_CLI_VERSION }}
+
+      - name: Install platform and libraries
+        run: |
+          # Add board manager URL | 添加开发板管理器 URL
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls "${{ matrix.platform_url }}"
+          
+          # Update index and install platform | 更新索引并安装平台
+          arduino-cli core update-index
+          arduino-cli core install ${{ matrix.platform }}
+          
+          # Install required libraries | 安装所需库
+          arduino-cli lib install "ArduinoJson"
+          arduino-cli lib install "WebSockets"
+          arduino-cli lib install "Adafruit NeoPixel"
+          
+          # Install SeeedHADiscovery library from local | 从本地安装 SeeedHADiscovery 库
+          mkdir -p ~/Arduino/libraries
+          cp -r arduino/SeeedHADiscovery ~/Arduino/libraries/
+
+      - name: Compile firmware
+        run: |
+          mkdir -p build/${{ matrix.firmware }}
+          
+          # Compile the sketch | 编译固件
+          arduino-cli compile \
+            --fqbn "${{ matrix.board }}:${{ matrix.board_options }}" \
+            --output-dir "build/${{ matrix.firmware }}" \
+            --export-binaries \
+            "${{ matrix.sketch }}"
+          
+          # List compiled files | 列出编译的文件
+          echo "Compiled files:"
+          ls -la build/${{ matrix.firmware }}/
+
+      - name: Prepare firmware files for ESP Web Tools
+        run: |
+          cd build/${{ matrix.firmware }}
+          
+          # Rename files for clarity | 重命名文件以便识别
+          # ESP32 typically outputs: sketch.ino.bin, sketch.ino.bootloader.bin, sketch.ino.partitions.bin
+          for f in *.bin; do
+            if [[ "$f" == *".ino.bin" ]]; then
+              mv "$f" "firmware.bin"
+            elif [[ "$f" == *".bootloader.bin" ]]; then
+              mv "$f" "bootloader.bin"
+            elif [[ "$f" == *".partitions.bin" ]]; then
+              mv "$f" "partitions.bin"
+            fi
+          done
+          
+          # List final files | 列出最终文件
+          echo "Final firmware files:"
+          ls -la
+
+      - name: Create manifest.json for ESP Web Tools
+        run: |
+          cd build/${{ matrix.firmware }}
+          
+          # Determine chip family and offsets based on board | 根据开发板确定芯片系列和偏移地址
+          # ESP32-C3/C6/S3/H2 use 0x0 for bootloader | ESP32-C3/C6/S3/H2 的 bootloader 偏移为 0x0
+          # Original ESP32/ESP32-S2 use 0x1000 | 原版 ESP32/ESP32-S2 的偏移为 0x1000
+          
+          CHIP_FAMILY="ESP32-C6"
+          BOOTLOADER_OFFSET=0
+          PARTITIONS_OFFSET=32768   # 0x8000
+          FIRMWARE_OFFSET=65536     # 0x10000
+          
+          if [[ "${{ matrix.board }}" == *"esp32s3"* ]] || [[ "${{ matrix.board }}" == *"XIAO_ESP32S3"* ]]; then
+            CHIP_FAMILY="ESP32-S3"
+            BOOTLOADER_OFFSET=0
+          elif [[ "${{ matrix.board }}" == *"esp32s2"* ]]; then
+            CHIP_FAMILY="ESP32-S2"
+            BOOTLOADER_OFFSET=4096  # 0x1000
+          elif [[ "${{ matrix.board }}" == *"esp32c3"* ]]; then
+            CHIP_FAMILY="ESP32-C3"
+            BOOTLOADER_OFFSET=0
+          elif [[ "${{ matrix.board }}" == *"esp32c6"* ]]; then
+            CHIP_FAMILY="ESP32-C6"
+            BOOTLOADER_OFFSET=0
+          elif [[ "${{ matrix.board }}" == *"esp32h2"* ]]; then
+            CHIP_FAMILY="ESP32-H2"
+            BOOTLOADER_OFFSET=0
+          elif [[ "${{ matrix.board }}" == *"esp32"* ]]; then
+            CHIP_FAMILY="ESP32"
+            BOOTLOADER_OFFSET=4096  # 0x1000
+          fi
+          
+          echo "Chip Family: ${CHIP_FAMILY}"
+          echo "Bootloader Offset: ${BOOTLOADER_OFFSET}"
+          
+          # Create manifest.json | 创建 manifest.json
+          cat > manifest.json << EOF
+          {
+            "name": "${{ matrix.firmware }}",
+            "version": "1.0.0",
+            "home_assistant_domain": "seeed_ha_discovery",
+            "funding_url": "https://www.seeedstudio.com/",
+            "new_install_prompt_erase": true,
+            "new_install_improv_wait_time": 0,
+            "builds": [
+              {
+                "chipFamily": "${CHIP_FAMILY}",
+                "parts": [
+                  { "path": "bootloader.bin", "offset": ${BOOTLOADER_OFFSET} },
+                  { "path": "partitions.bin", "offset": ${PARTITIONS_OFFSET} },
+                  { "path": "firmware.bin", "offset": ${FIRMWARE_OFFSET} }
+                ]
+              }
+            ]
+          }
+          EOF
+          
+          echo "Created manifest.json:"
+          cat manifest.json
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.firmware }}
+          path: build/${{ matrix.firmware }}/
+          retention-days: 30
+
+  # Combine all firmware into one artifact | 将所有固件合并到一个 artifact
+  combine:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all firmware artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-firmware/
+          pattern: firmware-*
+
+      - name: Reorganize firmware files
+        run: |
+          mkdir -p combined-firmware
+          for dir in all-firmware/firmware-*; do
+            firmware_name=$(basename "$dir" | sed 's/firmware-//')
+            cp -r "$dir" "combined-firmware/$firmware_name"
+          done
+          
+          echo "Combined firmware structure:"
+          find combined-firmware -type f
+
+      - name: Upload combined firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-firmware
+          path: combined-firmware/
+          retention-days: 90
+
+  # Create release (when manually triggered with release=true) | 创建发布版本（手动触发且 release=true 时）
+  release:
+    needs: combine
+    if: github.event.inputs.release == 'true' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download combined firmware
+        uses: actions/download-artifact@v4
+        with:
+          name: all-firmware
+          path: firmware/
+
+      - name: Create firmware index
+        run: |
+          cd firmware
+          
+          # Create index.json listing all available firmware | 创建列出所有可用固件的 index.json
+          echo '[' > index.json
+          first=true
+          for dir in */; do
+            firmware_name="${dir%/}"
+            if [ "$first" = true ]; then
+              first=false
+            else
+              echo ',' >> index.json
+            fi
+            echo "  {\"name\": \"$firmware_name\", \"manifest\": \"$firmware_name/manifest.json\"}" >> index.json
+          done
+          echo ']' >> index.json
+          
+          echo "Created index.json:"
+          cat index.json
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(date +'%Y.%m.%d')-$(git rev-parse --short HEAD)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: firmware-${{ steps.version.outputs.version }}
+          name: Firmware Release ${{ steps.version.outputs.version }}
+          body: |
+            ## Firmware Release
+            
+            This release contains pre-compiled firmware for Seeed HA Discovery devices.
+            
+            ### How to Flash | 如何烧录
+            
+            Visit our [Web Flasher](https://your-github-username.github.io/hacs-devolop/flasher/) to flash firmware directly from your browser.
+            
+            Or download the files and use ESP Web Tools manually.
+            
+            ### Included Firmware | 包含的固件
+            
+            - IoTButtonV2_DeepSleep (ESP32-C6)
+            - WiFiProvisioning (ESP32-C6)
+          files: |
+            firmware/**/*
+

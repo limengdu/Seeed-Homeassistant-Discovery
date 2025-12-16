@@ -4,11 +4,19 @@
 
 ## 功能特性
 
+### 📶 WiFi 网页配网（新功能！）
+- **网页配置**：无需在代码中硬编码 WiFi 凭据
+- **强制门户**：首次启动时，设备创建 AP "Seeed_IoT_Button_V2_AP"
+- **简单设置**：连接到 AP，打开浏览器，选择网络，输入密码
+- **凭据持久化**：WiFi 设置保存到 Flash，重启后依然有效
+- **长按重置**：在配网模式下，长按清除凭据
+
 ### 🔘 多击按键检测
 - **单击**：切换开关 1 + 粉紫色闪烁灯效
 - **双击**：切换开关 2 + 橙色微闪灯效
 - **三击**：切换开发者模式（3 分钟休眠超时，便于上传固件）
 - **长按（1-5秒）**：切换开关 3 + 彩虹渐变灯效
+- **长按（6秒以上）**：重置 WiFi 凭据并启动 AP 模式重新配网
 
 ### 🔋 电池监测
 - 通过 ADC 实时测量电池电压
@@ -121,11 +129,26 @@ git clone https://github.com/limengdu/SeeedHADiscovery.git
 
 ## 快速开始
 
-### 1. 配置 WiFi 凭据
+### 1. 配置 WiFi（选择一种方式）
 
-编辑代码中的以下行：
+#### 方式 A：网页配网（推荐）
+
+无需修改代码！通过浏览器配置 WiFi：
+
+1. 上传程序（`USE_WIFI_PROVISIONING` 设置为 `true`）
+2. 首次启动时，设备创建 AP：**Seeed_IoT_Button_V2_AP**
+3. 用手机/电脑连接到此 AP
+4. 浏览器自动打开，或手动访问 `http://192.168.4.1`
+5. 选择你的 WiFi 网络并输入密码
+6. 设备保存凭据并重启
+
+#### 方式 B：硬编码凭据
+
+将 `USE_WIFI_PROVISIONING` 设置为 `false` 并编辑凭据：
 
 ```cpp
+#define USE_WIFI_PROVISIONING false
+
 const char* WIFI_SSID = "你的WiFi名称";
 const char* WIFI_PASSWORD = "你的WiFi密码";
 ```
@@ -136,8 +159,11 @@ const char* WIFI_PASSWORD = "你的WiFi密码";
 2. 配置设置：
    - Flash Size: 4MB
    - CPU Frequency: 80MHz（推荐低功耗）
+   - **Partition Scheme（分区方案）: "Huge APP (3MB No OTA/1MB SPIFFS)"** ⚠️ 重要！
    - Upload Speed: 921600
 3. 上传程序
+
+> ⚠️ **重要**：如果看到错误 `text section exceeds available space in board`，必须更改分区方案。进入 **工具** → **Partition Scheme（分区方案）**，选择 **"Huge APP (3MB No OTA/1MB SPIFFS)"** 或 **"Minimal SPIFFS (1.9MB APP with OTA/190KB SPIFFS)"**。
 
 ### 3. 添加到 Home Assistant
 
@@ -153,8 +179,37 @@ const char* WIFI_PASSWORD = "你的WiFi密码";
 |-----|------|------|
 | 红色 | 常亮 | WiFi 断开 / 正在连接 |
 | 蓝色 | 常亮 | WiFi 已连接 |
+| 红+蓝 | 交替（5次） | WiFi 配网模式已激活 |
 | 红+蓝 | 闪烁（3次） | 开发者模式已启用 |
 | RGB | 各种灯效 | 按键操作反馈 |
+
+## WiFi 配网模式
+
+当 `USE_WIFI_PROVISIONING` 启用（默认）时，设备使用网页配网：
+
+### 首次启动 / 无凭据
+1. 设备创建 AP 热点：**Seeed_IoT_Button_V2_AP**
+2. 红/蓝 LED 交替闪烁表示配网模式
+3. 用手机或电脑连接到 AP
+4. 浏览器自动打开强制门户
+5. 如果没有自动打开，手动访问 `http://192.168.4.1`
+
+### 配置界面
+- **网络列表**：显示可用的 WiFi 网络及信号强度
+- **安全**：锁图标表示需要密码的网络
+- **刷新**：点击重新扫描网络
+- **重置**：清除保存的凭据
+
+### 配网模式控制
+- **长按（1-5秒）**：清除保存的 WiFi 凭据并重启
+- **任意按键操作**：重置 3 分钟超时计时器
+- **3 分钟**无操作后设备将进入深度睡眠以保护电池
+- 这对于出厂固件很重要 - 设备可能在包装中放置数月！
+
+### 重新配置 WiFi
+要更改 WiFi 设置：
+1. 在配网模式下长按按钮，或
+2. 在代码中调用 `ha.clearWiFiCredentials()` 并重新上传
 
 ## 开发者模式
 
@@ -184,12 +239,16 @@ const char* WIFI_PASSWORD = "你的WiFi密码";
 | 单击 | ≤ 1 秒 | 0.5 秒内无下次按下 |
 | 双击 | 每次 ≤ 1 秒 | 两次点击间隔 ≤ 1 秒 |
 | 三击 | 每次 ≤ 0.8 秒 | 点击间隔 ≤ 0.8 秒 |
-| 长按 | 1-5 秒 | 不适用 |
+| 长按（开关 3） | 1-5 秒 | 不适用 |
+| 长按（WiFi 重置） | ≥ 6 秒 | 不适用 |
+
+> **注意**：6 秒 WiFi 重置功能在**唤醒状态和从深度睡眠唤醒时**都能工作。只需在任何时候按住按钮 6 秒以上即可重置 WiFi 凭据并进入 AP 模式。
 
 ## 持久化存储
 
 以下数据保存到 Flash，在深度睡眠/重启后保留：
 
+- WiFi 凭据（SSID 和密码）- 如果使用配网功能
 - 开关 1/2/3 状态
 - 上次电池百分比（用于防跳变滤波器）
 
@@ -201,6 +260,11 @@ const char* WIFI_PASSWORD = "你的WiFi密码";
 | 深度睡眠 | 约 10µA | 已配置 GPIO 唤醒 |
 
 ## 故障排除
+
+### "text section exceeds available space in board" 编译错误
+- 此错误表示代码太大，超出了默认分区方案的空间
+- **解决方案**：进入 **工具** → **Partition Scheme（分区方案）** → 选择 **"Huge APP (3MB No OTA/1MB SPIFFS)"**
+- 备选方案：选择 **"Minimal SPIFFS (1.9MB APP with OTA/190KB SPIFFS)"**
 
 ### 设备无法从深度睡眠唤醒
 - 确保 GPIO2 正确连接到按钮

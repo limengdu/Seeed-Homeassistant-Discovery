@@ -344,7 +344,7 @@ void drawFooter() {
  * 绘制完整仪表板
  */
 void drawDashboard() {
-#ifdef EPAPER_ENABLE
+#ifdef EPAPER_ENABLE  
     Serial1.println("Drawing dashboard...");
     
     // Handle HA before long E-Paper operation | 在长时间墨水屏操作前处理 HA
@@ -386,7 +386,7 @@ void drawDashboard() {
     // Update E-Paper display (this is BLOCKING and takes several seconds!)
     // 更新墨水屏（这是阻塞操作，需要几秒钟！）
     Serial1.println("Updating E-Paper display (this may take a while)...");
-    epaper.update();
+  epaper.update();
     Serial1.println("Display updated!");
     
     // Immediately handle HA after update to restore connection
@@ -461,7 +461,7 @@ void drawStartupScreen(const char* status, const char* ip = nullptr) {
     epaper.fillRect(3 * barWidth, SCREEN_HEIGHT - 25, barWidth, 25, COLOR_WHITE);
     epaper.drawRect(3 * barWidth, SCREEN_HEIGHT - 25, barWidth, 25, COLOR_BLACK);
     
-    epaper.update();
+  epaper.update();
 #endif
 }
 

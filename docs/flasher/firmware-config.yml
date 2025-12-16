@@ -1,0 +1,144 @@
+# Firmware Configuration for Web Flasher
+# 网页烧录器固件配置
+#
+# This file defines all available firmware and their build configurations.
+# 此文件定义所有可用固件及其构建配置。
+#
+# Each firmware entry includes:
+# 每个固件条目包括：
+# - name: Display name shown on the web flasher page | 在网页烧录器页面显示的名称
+# - description: Brief description of the firmware | 固件简介
+# - sketch: Path to the Arduino sketch file | Arduino 代码文件路径
+# - board: Board FQBN (Fully Qualified Board Name) | 开发板 FQBN
+# - board_options: Additional board options | 附加开发板选项
+# - platform: Arduino platform identifier | Arduino 平台标识符
+# - platform_url: Board manager URL | 开发板管理器 URL
+# - chip_family: ESP chip family for ESP Web Tools | ESP Web Tools 的芯片系列
+# - icon: Emoji icon for the card | 卡片的 emoji 图标
+# - features: List of features tags | 功能标签列表
+
+firmware:
+  # ============================================================================
+  # ESP32-C6 Based Products | 基于 ESP32-C6 的产品
+  # ============================================================================
+  
+  - id: IoTButtonV2_DeepSleep
+    name: "IoT Button V2"
+    name_zh: "物联网按钮 V2"
+    description: "Low-power IoT button with deep sleep mode (~10µA). Supports single/double/triple click and long press."
+    description_zh: "低功耗物联网按钮，支持深度睡眠模式（约 10µA）。支持单击/双击/三击和长按。"
+    sketch: "arduino/SeeedHADiscovery/examples/IoTButtonV2_DeepSleep/IoTButtonV2_DeepSleep.ino"
+    board: "esp32:esp32:esp32c6"
+    board_options: "CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
+    platform: "esp32:esp32"
+    platform_url: "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
+    chip_family: "ESP32-C6"
+    icon: "🔘"
+    features:
+      - "Deep Sleep"
+      - "Web Provisioning"
+      - "RGB LED"
+      - "Battery Monitor"
+    features_zh:
+      - "深度睡眠"
+      - "网页配网"
+      - "RGB LED"
+      - "电池监测"
+  
+  - id: WiFiProvisioning
+    name: "WiFi Provisioning Demo"
+    name_zh: "WiFi 配网演示"
+    description: "Simple WiFi provisioning example demonstrating web-based network configuration."
+    description_zh: "简单的 WiFi 配网示例，演示基于网页的网络配置。"
+    sketch: "arduino/SeeedHADiscovery/examples/WiFiProvisioning/WiFiProvisioning.ino"
+    board: "esp32:esp32:esp32c6"
+    board_options: "CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
+    platform: "esp32:esp32"
+    platform_url: "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
+    chip_family: "ESP32-C6"
+    icon: "📶"
+    features:
+      - "Web Provisioning"
+      - "Captive Portal"
+      - "Auto-connect"
+    features_zh:
+      - "网页配网"
+      - "强制门户"
+      - "自动连接"
+  
+  # ============================================================================
+  # ESP32-S3 Based Products | 基于 ESP32-S3 的产品
+  # ============================================================================
+  
+  - id: CameraStream
+    name: "Camera Stream"
+    name_zh: "摄像头流媒体"
+    description: "Camera streaming firmware for XIAO ESP32S3 Sense. Stream video directly to Home Assistant."
+    description_zh: "适用于 XIAO ESP32S3 Sense 的摄像头流媒体固件。直接向 Home Assistant 传输视频。"
+    sketch: "arduino/SeeedHADiscovery/examples/CameraStream/CameraStream.ino"
+    board: "esp32:esp32:XIAO_ESP32S3"
+    board_options: "PartitionScheme=huge_app,PSRAM=opi,FlashMode=qio,FlashSize=8M"
+    platform: "esp32:esp32"
+    platform_url: "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
+    chip_family: "ESP32-S3"
+    icon: "📷"
+    enabled: false  # Not ready yet | 尚未准备好
+    features:
+      - "Video Stream"
+      - "MJPEG"
+      - "HA Camera"
+    features_zh:
+      - "视频流"
+      - "MJPEG"
+      - "HA 摄像头"
+  
+  # ============================================================================
+  # Additional Products - Add yours here | 其他产品 - 在此添加
+  # ============================================================================
+  
+  # Example template | 示例模板：
+  # - id: YourProductId
+  #   name: "Your Product Name"
+  #   name_zh: "您的产品名称"
+  #   description: "Product description in English"
+  #   description_zh: "产品中文描述"
+  #   sketch: "path/to/your/sketch.ino"
+  #   board: "esp32:esp32:boardname"
+  #   board_options: "key=value,key2=value2"
+  #   platform: "esp32:esp32"
+  #   platform_url: "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
+  #   chip_family: "ESP32-C6"  # One of: ESP32, ESP32-S2, ESP32-S3, ESP32-C3, ESP32-C6
+  #   icon: "🎯"
+  #   features:
+  #     - "Feature 1"
+  #     - "Feature 2"
+  #   features_zh:
+  #     - "功能 1"
+  #     - "功能 2"
+
+# ============================================================================
+# Required Libraries | 所需库
+# ============================================================================
+# These libraries will be installed by the GitHub Actions workflow
+# 这些库将由 GitHub Actions 工作流安装
+
+libraries:
+  - "ArduinoJson"
+  - "WebSockets"
+  - "Adafruit NeoPixel"
+  # Add more as needed | 根据需要添加更多
+
+# ============================================================================
+# Platform Definitions | 平台定义
+# ============================================================================
+# Centralized platform configuration for reuse
+# 集中的平台配置以便重用
+
+platforms:
+  esp32:
+    name: "ESP32"
+    package: "esp32:esp32"
+    url: "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
+    
+  # Future: ESP8266, RP2040, etc.
+

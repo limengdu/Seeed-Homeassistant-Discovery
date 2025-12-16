@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seeed HA Discovery - Web Flasher | 网页固件烧录器</title>
+    
+    <!-- ESP Web Tools | ESP 网页烧录工具 -->
+    <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap');
+        
+        :root {
+            --bg-primary: #0a0e14;
+            --bg-secondary: #141a22;
+            --bg-card: #1a2332;
+            --bg-card-hover: #1f2940;
+            --accent-green: #3dd68c;
+            --accent-green-dim: rgba(61, 214, 140, 0.15);
+            --accent-orange: #ffb454;
+            --accent-orange-dim: rgba(255, 180, 84, 0.15);
+            --accent-blue: #39bae6;
+            --accent-blue-dim: rgba(57, 186, 230, 0.15);
+            --accent-purple: #c882ff;
+            --text-primary: #e6e6e6;
+            --text-secondary: #8b949e;
+            --text-muted: #5c6773;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --shadow-glow: 0 0 40px rgba(61, 214, 140, 0.1);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        
+        /* Background pattern */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 20%, rgba(61, 214, 140, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(57, 186, 230, 0.05) 0%, transparent 50%),
+                linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.3) 100%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        /* Header */
+        header {
+            text-align: center;
+            padding: 3rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .logo-icon {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, var(--accent-green), var(--accent-blue));
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            box-shadow: var(--shadow-glow);
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-green), var(--accent-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            margin-top: 0.5rem;
+        }
+        
+        /* Language toggle */
+        .lang-toggle {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+        }
+        
+        .lang-btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--border-color);
+            background: transparent;
+            color: var(--text-secondary);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+        
+        .lang-btn:hover,
+        .lang-btn.active {
+            background: var(--accent-green-dim);
+            border-color: var(--accent-green);
+            color: var(--accent-green);
+        }
+        
+        /* Instructions */
+        .instructions {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 3rem;
+        }
+        
+        .instructions h2 {
+            color: var(--accent-orange);
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .instructions ol {
+            color: var(--text-secondary);
+            padding-left: 1.5rem;
+        }
+        
+        .instructions li {
+            margin-bottom: 0.8rem;
+        }
+        
+        .instructions code {
+            background: var(--bg-primary);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--accent-green);
+        }
+        
+        .warning {
+            background: var(--accent-orange-dim);
+            border: 1px solid var(--accent-orange);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+            color: var(--accent-orange);
+            font-size: 0.9rem;
+        }
+        
+        /* Firmware grid */
+        .firmware-section h2 {
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            color: var(--text-primary);
+        }
+        
+        .firmware-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        /* Firmware card */
+        .firmware-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .firmware-card:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--accent-green);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-glow);
+        }
+        
+        .firmware-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent-green), var(--accent-blue));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .firmware-card:hover::before {
+            opacity: 1;
+        }
+        
+        .card-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .card-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--accent-green-dim);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }
+        
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+        
+        .card-chip {
+            display: inline-block;
+            background: var(--accent-blue-dim);
+            color: var(--accent-blue);
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .card-description {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            margin-bottom: 1rem;
+            line-height: 1.5;
+        }
+        
+        .card-features {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .feature-tag {
+            background: var(--bg-primary);
+            color: var(--text-muted);
+            padding: 0.25rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+        }
+        
+        /* ESP Web Tools button styling */
+        esp-web-install-button {
+            display: block;
+        }
+        
+        esp-web-install-button::part(button) {
+            width: 100%;
+            padding: 0.875rem 1.5rem;
+            background: linear-gradient(135deg, var(--accent-green), #2ab573);
+            border: none;
+            border-radius: 10px;
+            color: var(--bg-primary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        esp-web-install-button::part(button):hover {
+            transform: scale(1.02);
+            box-shadow: 0 4px 20px rgba(61, 214, 140, 0.4);
+        }
+        
+        esp-web-install-button[install-unsupported]::part(button) {
+            background: var(--text-muted);
+            cursor: not-allowed;
+        }
+        
+        /* Unsupported browser message */
+        .unsupported {
+            display: none;
+            background: rgba(255, 100, 100, 0.1);
+            border: 1px solid rgba(255, 100, 100, 0.3);
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+            color: #ff6b6b;
+        }
+        
+        esp-web-install-button[install-unsupported] + .unsupported {
+            display: block;
+        }
+        
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 3rem 0;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        
+        footer a {
+            color: var(--accent-green);
+            text-decoration: none;
+        }
+        
+        footer a:hover {
+            text-decoration: underline;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+            
+            h1 {
+                font-size: 1.8rem;
+            }
+            
+            .firmware-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .instructions {
+                padding: 1.5rem;
+            }
+        }
+        
+        /* Animation */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .loading {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <div class="logo-icon">⚡</div>
+                <h1>Seeed HA Discovery</h1>
+            </div>
+            <p class="subtitle" data-en="Web Firmware Flasher" data-zh="网页固件烧录器">Web Firmware Flasher</p>
+            
+            <div class="lang-toggle">
+                <button class="lang-btn active" onclick="setLanguage('en')">English</button>
+                <button class="lang-btn" onclick="setLanguage('zh')">中文</button>
+            </div>
+        </header>
+        
+        <section class="instructions">
+            <h2>📋 <span data-en="Instructions" data-zh="使用说明">Instructions</span></h2>
+            <ol>
+                <li data-en="Connect your device to your computer via USB" data-zh="通过 USB 将设备连接到电脑">
+                    Connect your device to your computer via USB
+                </li>
+                <li data-en="Click the 'Install' button on the firmware card below" data-zh="点击下方固件卡片上的"安装"按钮">
+                    Click the "Install" button on the firmware card below
+                </li>
+                <li data-en="Select the correct serial port (usually contains 'USB' or 'UART')" data-zh="选择正确的串口（通常包含 'USB' 或 'UART'）">
+                    Select the correct serial port (usually contains "USB" or "UART")
+                </li>
+                <li data-en="Wait for the flashing process to complete" data-zh="等待烧录过程完成">
+                    Wait for the flashing process to complete
+                </li>
+            </ol>
+            
+            <div class="warning">
+                <strong data-en="⚠️ Browser Requirement:" data-zh="⚠️ 浏览器要求：">⚠️ Browser Requirement:</strong>
+                <span data-en="Chrome, Edge, or Opera required. Safari and Firefox are not supported." data-zh="需要 Chrome、Edge 或 Opera 浏览器。不支持 Safari 和 Firefox。">
+                    Chrome, Edge, or Opera required. Safari and Firefox are not supported.
+                </span>
+            </div>
+        </section>
+        
+        <section class="firmware-section">
+            <h2 data-en="Available Firmware" data-zh="可用固件">Available Firmware</h2>
+            
+            <div class="firmware-grid">
+                <!-- IoT Button V2 -->
+                <div class="firmware-card">
+                    <div class="card-header">
+                        <div class="card-icon">🔘</div>
+                        <div>
+                            <div class="card-title">IoT Button V2</div>
+                            <span class="card-chip">ESP32-C6</span>
+                        </div>
+                    </div>
+                    <p class="card-description" data-en="Low-power IoT button with deep sleep mode (~10µA). Supports single/double/triple click and long press. Web-based WiFi provisioning included." data-zh="低功耗物联网按钮，支持深度睡眠模式（约 10µA）。支持单击/双击/三击和长按。包含网页配网功能。">
+                        Low-power IoT button with deep sleep mode (~10µA). Supports single/double/triple click and long press. Web-based WiFi provisioning included.
+                    </p>
+                    <div class="card-features">
+                        <span class="feature-tag" data-en="Deep Sleep" data-zh="深度睡眠">Deep Sleep</span>
+                        <span class="feature-tag" data-en="Web Provisioning" data-zh="网页配网">Web Provisioning</span>
+                        <span class="feature-tag" data-en="RGB LED" data-zh="RGB LED">RGB LED</span>
+                        <span class="feature-tag" data-en="Battery Monitor" data-zh="电池监测">Battery Monitor</span>
+                    </div>
+                    
+                    <esp-web-install-button manifest="./firmware/IoTButtonV2_DeepSleep/manifest.json">
+                        <button slot="activate" data-en="Install IoT Button V2 Firmware" data-zh="安装 IoT Button V2 固件">
+                            Install IoT Button V2 Firmware
+                        </button>
+                        <span slot="unsupported" data-en="Your browser doesn't support Web Serial" data-zh="您的浏览器不支持 Web Serial">
+                            Your browser doesn't support Web Serial
+                        </span>
+                        <span slot="not-allowed" data-en="Not allowed to use Web Serial" data-zh="不允许使用 Web Serial">
+                            Not allowed to use Web Serial
+                        </span>
+                    </esp-web-install-button>
+                    <div class="unsupported" data-en="Please use Chrome, Edge, or Opera browser" data-zh="请使用 Chrome、Edge 或 Opera 浏览器">
+                        Please use Chrome, Edge, or Opera browser
+                    </div>
+                </div>
+                
+                <!-- WiFi Provisioning Example -->
+                <div class="firmware-card">
+                    <div class="card-header">
+                        <div class="card-icon">📶</div>
+                        <div>
+                            <div class="card-title">WiFi Provisioning Demo</div>
+                            <span class="card-chip">ESP32-C6</span>
+                        </div>
+                    </div>
+                    <p class="card-description" data-en="Simple WiFi provisioning example demonstrating web-based network configuration. Use this to test the WiFi setup flow." data-zh="简单的 WiFi 配网示例，演示基于网页的网络配置。用于测试 WiFi 设置流程。">
+                        Simple WiFi provisioning example demonstrating web-based network configuration. Use this to test the WiFi setup flow.
+                    </p>
+                    <div class="card-features">
+                        <span class="feature-tag" data-en="Web Provisioning" data-zh="网页配网">Web Provisioning</span>
+                        <span class="feature-tag" data-en="Captive Portal" data-zh="强制门户">Captive Portal</span>
+                        <span class="feature-tag" data-en="Auto-connect" data-zh="自动连接">Auto-connect</span>
+                    </div>
+                    
+                    <esp-web-install-button manifest="./firmware/WiFiProvisioning/manifest.json">
+                        <button slot="activate" data-en="Install WiFi Demo Firmware" data-zh="安装 WiFi 演示固件">
+                            Install WiFi Demo Firmware
+                        </button>
+                        <span slot="unsupported" data-en="Your browser doesn't support Web Serial" data-zh="您的浏览器不支持 Web Serial">
+                            Your browser doesn't support Web Serial
+                        </span>
+                        <span slot="not-allowed" data-en="Not allowed to use Web Serial" data-zh="不允许使用 Web Serial">
+                            Not allowed to use Web Serial
+                        </span>
+                    </esp-web-install-button>
+                    <div class="unsupported" data-en="Please use Chrome, Edge, or Opera browser" data-zh="请使用 Chrome、Edge 或 Opera 浏览器">
+                        Please use Chrome, Edge, or Opera browser
+                    </div>
+                </div>
+                
+                <!-- Camera Stream (Coming Soon) -->
+                <div class="firmware-card" style="opacity: 0.6;">
+                    <div class="card-header">
+                        <div class="card-icon">📷</div>
+                        <div>
+                            <div class="card-title">Camera Stream</div>
+                            <span class="card-chip">ESP32-S3</span>
+                        </div>
+                    </div>
+                    <p class="card-description" data-en="Camera streaming firmware for XIAO ESP32S3 Sense. Stream video directly to Home Assistant. (Coming Soon)" data-zh="适用于 XIAO ESP32S3 Sense 的摄像头流媒体固件。直接向 Home Assistant 传输视频。（即将推出）">
+                        Camera streaming firmware for XIAO ESP32S3 Sense. Stream video directly to Home Assistant. (Coming Soon)
+                    </p>
+                    <div class="card-features">
+                        <span class="feature-tag" data-en="Video Stream" data-zh="视频流">Video Stream</span>
+                        <span class="feature-tag" data-en="MJPEG" data-zh="MJPEG">MJPEG</span>
+                        <span class="feature-tag" data-en="HA Camera" data-zh="HA 摄像头">HA Camera</span>
+                    </div>
+                    
+                    <button disabled style="width: 100%; padding: 0.875rem; background: var(--text-muted); border: none; border-radius: 10px; color: var(--bg-primary); font-weight: 600; cursor: not-allowed;" data-en="Coming Soon" data-zh="即将推出">
+                        Coming Soon
+                    </button>
+                </div>
+            </div>
+        </section>
+        
+        <footer>
+            <p>
+                <span data-en="Powered by" data-zh="由">Powered by</span>
+                <a href="https://esphome.github.io/esp-web-tools/" target="_blank">ESP Web Tools</a> |
+                <a href="https://github.com/Seeed-Studio/SenseCraft-HomeAssistant" target="_blank">GitHub</a> |
+                <a href="https://wiki.seeedstudio.com/" target="_blank">Seeed Wiki</a>
+            </p>
+            <p style="margin-top: 0.5rem;">
+                © 2024 Seeed Technology Co., Ltd.
+            </p>
+        </footer>
+    </div>
+    
+    <script>
+        // Language switching | 语言切换
+        let currentLang = 'en';
+        
+        function setLanguage(lang) {
+            currentLang = lang;
+            
+            // Update button states | 更新按钮状态
+            document.querySelectorAll('.lang-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.textContent.includes(lang === 'en' ? 'English' : '中文')) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            // Update all translatable elements | 更新所有可翻译元素
+            document.querySelectorAll('[data-en][data-zh]').forEach(el => {
+                el.textContent = el.getAttribute(`data-${lang}`);
+            });
+            
+            // Save preference | 保存偏好
+            localStorage.setItem('preferred-lang', lang);
+        }
+        
+        // Load saved preference | 加载保存的偏好
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedLang = localStorage.getItem('preferred-lang');
+            if (savedLang) {
+                setLanguage(savedLang);
+            } else {
+                // Auto-detect language | 自动检测语言
+                const browserLang = navigator.language.toLowerCase();
+                if (browserLang.startsWith('zh')) {
+                    setLanguage('zh');
+                }
+            }
+        });
+    </script>
+</body>
+</html>
+

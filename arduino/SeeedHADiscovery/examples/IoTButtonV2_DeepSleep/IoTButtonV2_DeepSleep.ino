@@ -6,28 +6,59 @@
  *
  * This example demonstrates how to create a low-power IoT button with:
  * 本示例展示如何创建一个低功耗物联网按钮：
- * 1. Four button press detection modes (single, double, triple, long press)
+ * 1. Web-based WiFi provisioning (captive portal)
+ *    网页配网（强制门户）
+ * 2. Four button press detection modes (single, double, triple, long press)
  *    四种按键检测模式（单击、双击、三击、长按）
- * 2. Battery voltage monitoring with ADC
+ * 3. Battery voltage monitoring with ADC
  *    电池电压监测，使用 ADC
- * 3. RGB LED effects (Blink, Rainbow, Subtle Flicker, Random Color)
+ * 4. RGB LED effects (Blink, Rainbow, Subtle Flicker, Random Color)
  *    RGB LED 灯效（闪烁、彩虹渐变、微闪、随机颜色）
- * 4. Deep Sleep mode with GPIO wake-up for minimum power consumption (~10µA)
+ * 5. Deep Sleep mode with GPIO wake-up for minimum power consumption (~10µA)
  *    深度睡眠模式，GPIO 唤醒，最低功耗（约 10µA）
- * 5. WiFi connectivity with Home Assistant integration
+ * 6. WiFi connectivity with Home Assistant integration
  *    WiFi 连接与 Home Assistant 集成
- * 6. Smart sleep timeout: 10s after HA connected, 3min before connection (resets on each button action)
- *    智能休眠超时：HA 连接后 10 秒，连接前 3 分钟（每次按键操作重置）
- * 7. Dev mode (triple click): 3 minute timeout for firmware upload
- *    开发模式（三击）：3 分钟超时，便于上传固件
+ * 7. Smart sleep timeout based on LAST button action:
+ *    智能休眠超时，根据最后一次按键决定：
+ *    - Triple click: 3 min (dev mode for firmware upload)
+ *      三击：3分钟（开发模式，便于上传固件）
+ *    - Other clicks: 10s if HA connected, 3min if not
+ *      其他按键：HA连接10秒，未连接3分钟
  * 8. Seamless wake-up: wake-up press counts as first click in sequence
  *    无缝唤醒：唤醒按键作为序列中的第一次点击
+ *
+ * WiFi Provisioning:
+ * WiFi 配网：
+ * - On first boot (no saved credentials), device creates AP: "Seeed_IoT_Button_V2_AP"
+ *   首次启动（无保存凭据）时，设备创建 AP："Seeed_IoT_Button_V2_AP"
+ * - Connect to AP and open http://192.168.4.1 in browser
+ *   连接到 AP 并在浏览器中打开 http://192.168.4.1
+ * - Select WiFi network and enter password
+ *   选择 WiFi 网络并输入密码
+ * - Credentials are saved and used on subsequent boots
+ *   凭据被保存并在后续启动时使用
+ * - Long press during provisioning mode: clear credentials and restart
+ *   配网模式下长按：清除凭据并重启
+ * - Provisioning mode times out after 3 minutes to save battery (important for factory firmware!)
+ *   配网模式 3 分钟后超时进入休眠以保护电池（出厂固件重要特性！）
  *
  * Hardware Platform:
  * 硬件平台：
  * - ESP32-C6 (esp32-c6-devkitc-1)
  * - Flash: 4MB, CPU: 80MHz (for low power)
  *   Flash: 4MB, CPU: 80MHz（降低功耗）
+ *
+ * ⚠️ IMPORTANT - Partition Scheme:
+ * ⚠️ 重要 - 分区方案：
+ * This example requires a larger partition scheme due to WiFi provisioning features.
+ * 由于包含 WiFi 配网功能，本示例需要更大的分区方案。
+ * In Arduino IDE: Tools → Partition Scheme → Select one of:
+ * 在 Arduino IDE 中：工具 → 分区方案 → 选择以下之一：
+ *   - "Huge APP (3MB No OTA/1MB SPIFFS)" (Recommended)
+ *     "Huge APP (3MB No OTA/1MB SPIFFS)"（推荐）
+ *   - "Minimal SPIFFS (1.9MB APP with OTA/190KB SPIFFS)"
+ * If you see "text section exceeds available space" error, change the partition scheme!
+ * 如果看到 "text section exceeds available space" 错误，请更改分区方案！
  *
  * Pin Configuration:
  * 引脚配置：
@@ -48,10 +79,11 @@
  *
  * Button Functions:
  * 按钮功能：
- * - Single click: Toggle Switch 1 | 单击：切换开关 1
- * - Double click: Toggle Switch 2 | 双击：切换开关 2
- * - Triple click: Toggle Dev Mode (3 min sleep) | 三击：切换开发模式（3 分钟休眠）
- * - Long press (1-2s): Toggle Switch 3 | 长按（1-2秒）：切换开关 3
+ * - Single click: Toggle Switch 1, sleep in 10s (if HA connected) | 单击：切换开关 1，10秒后休眠（HA已连接时）
+ * - Double click: Toggle Switch 2, sleep in 10s (if HA connected) | 双击：切换开关 2，10秒后休眠（HA已连接时）
+ * - Triple click: Dev Mode, sleep in 3 min | 三击：开发模式，3分钟后休眠
+ * - Long press (1-5s): Toggle Switch 3, sleep in 10s (if HA connected) | 长按（1-5秒）：切换开关 3，10秒后休眠（HA已连接时）
+ * - Long press (6s+): Reset WiFi credentials and start AP mode | 长按（6秒以上）：重置 WiFi 凭据并启动 AP 模式
  *
  * Entities exposed to Home Assistant:
  * 暴露给 Home Assistant 的实体：
@@ -89,6 +121,20 @@
 // =============================================================================
 
 // WiFi Configuration | WiFi 配置
+// Note: With web provisioning enabled, these are used as fallback only.
+// The device will use saved credentials first, then fall back to AP mode for configuration.
+// 注意：启用网页配网后，这些仅作为备用。
+// 设备会首先使用保存的凭据，然后回退到 AP 模式进行配置。
+const char* AP_SSID = "Seeed_IoT_Button_V2_AP";    // AP hotspot name | AP 热点名称
+
+// Set to true to enable web-based WiFi provisioning (recommended)
+// Set to false to use hardcoded credentials below
+// 设置为 true 启用网页配网（推荐）
+// 设置为 false 使用下面的硬编码凭据
+#define USE_WIFI_PROVISIONING true
+
+// Fallback WiFi credentials (only used if USE_WIFI_PROVISIONING is false)
+// 备用 WiFi 凭据（仅在 USE_WIFI_PROVISIONING 为 false 时使用）
 const char* WIFI_SSID = "Your_WiFi_SSID";          // Your WiFi SSID | 你的WiFi名称
 const char* WIFI_PASSWORD = "Your_WiFi_Password";  // Your WiFi password | 你的WiFi密码
 
@@ -116,10 +162,10 @@ const char* WIFI_PASSWORD = "Your_WiFi_Password";  // Your WiFi password | 你�
 // Button Detection Parameters | 按钮检测参数
 #define LONG_PRESS_MIN_TIME     1000   // Long press minimum (ms) | 长按最小时间（毫秒）
 #define LONG_PRESS_MAX_TIME     5000   // Long press maximum (ms) | 长按最大时间（毫秒）- 增加到5秒
-#define SINGLE_CLICK_MAX_TIME   1000   // Single click max press time (ms) | 单击最大按下时间（毫秒）
-#define SINGLE_CLICK_WAIT_TIME  500    // Wait time for single click confirmation (ms) | 单击确认等待时间（毫秒）
-#define DOUBLE_CLICK_GAP_TIME   1000   // Double click max release gap (ms) | 双击最大释放间隔（毫秒）
-#define DOUBLE_CLICK_MAX_PRESS  1000   // Double click max press time (ms) | 双击单次最大按下时间（毫秒）
+#define SINGLE_CLICK_MAX_TIME   600    // Single click max press time (ms) | 单击最大按下时间（毫秒）
+#define SINGLE_CLICK_WAIT_TIME  300    // Wait time for single click confirmation (ms) | 单击确认等待时间（毫秒）
+#define DOUBLE_CLICK_GAP_TIME   400    // Double click max release gap (ms) | 双击最大释放间隔（毫秒）
+#define DOUBLE_CLICK_MAX_PRESS  600    // Double click max press time (ms) | 双击单次最大按下时间（毫秒）
 
 // Battery Monitoring | 电池监测
 #define BATTERY_VOLTAGE_MIN     2.75f  // 0% voltage | 0% 电压
@@ -134,8 +180,8 @@ const char* WIFI_PASSWORD = "Your_WiFi_Password";  // Your WiFi password | 你�
 #define INACTIVITY_TIMEOUT_DEV_MODE    180000  // Dev mode sleep timeout (ms) | 开发模式休眠超时（毫秒）
 
 // Triple Click Parameters | 三击参数
-#define TRIPLE_CLICK_GAP_TIME   800    // Triple click max release gap (ms) | 三击最大释放间隔（毫秒）
-#define TRIPLE_CLICK_MAX_PRESS  800    // Triple click max press time (ms) | 三击单次最大按下时间（毫秒）
+#define TRIPLE_CLICK_GAP_TIME   350    // Triple click max release gap (ms) | 三击最大释放间隔（毫秒）
+#define TRIPLE_CLICK_MAX_PRESS  400    // Triple click max press time (ms) | 三击单次最大按下时间（毫秒）
 
 // RGB LED Effect Duration | RGB LED 灯效持续时间
 #define RGB_EFFECT_DURATION     1000   // Effect duration (ms) | 灯效持续时间（毫秒）
@@ -197,8 +243,8 @@ float last_battery_percentage = 100.0f;  // Last battery percentage (persistent)
 // HA sync state | HA 同步状态
 bool haStatesSynced = false;  // Whether states have been synced to HA after boot | 启动后是否已同步状态到 HA
 
-// Development mode | 开发模式
-bool devModeEnabled = false;  // Dev mode for extended sleep timeout | 开发模式，延长休眠超时
+// Last button event for sleep timeout decision | 最后一次按键事件用于决定休眠超时
+ButtonEvent lastButtonEvent = BUTTON_NONE;  // Last button event type | 最后一次按键事件类型
 
 // Wake-up button event handling | 唤醒按键事件处理
 ButtonEvent pendingWakeupEvent = BUTTON_NONE;  // Event detected during boot | 启动时检测到的事件
@@ -211,6 +257,7 @@ uint32_t effectColor = 0;  // For Subtle Flicker base color | 用于微闪的基
 
 // WiFi state tracking | WiFi 状态跟踪
 bool wasWiFiConnected = false;
+bool wifiProvisioningMode = false;  // Whether in AP mode for provisioning | 是否处于 AP 配网模式
 
 // =============================================================================
 // LED Control Functions | LED 控制函数
@@ -569,6 +616,9 @@ ButtonEvent detectButtonEvent() {
  * Blocking function - waits until event is detected or timeout.
  * 阻塞函数 - 等待直到检测到事件或超时。
  * 
+ * Special: Long press 6+ seconds triggers WiFi reset (same as when awake)
+ * 特殊：长按 6 秒以上触发 WiFi 重置（与唤醒状态相同）
+ * 
  * @return Detected button event | 检测到的按键事件
  */
 ButtonEvent detectButtonEventDuringBoot() {
@@ -582,15 +632,54 @@ ButtonEvent detectButtonEventDuringBoot() {
     uint32_t localLastReleaseTime = 0;
     
     // Maximum time to wait for complete button sequence | 等待完整按键序列的最大时间
-    const uint32_t MAX_DETECTION_TIME = 6000;  // 6 seconds (to allow 5s long press) | 6秒（允许5秒长按）
+    const uint32_t MAX_DETECTION_TIME = 7000;  // 7 seconds (to allow 6s WiFi reset) | 7秒（允许6秒WiFi重置）
+    const uint32_t WIFI_RESET_HOLD_TIME = 6000;  // 6 seconds to trigger WiFi reset | 6秒触发WiFi重置
     
     Serial.println("  Waiting for button release (first press)...");
+    Serial.println("  (Hold 6+ seconds to reset WiFi)");
     
     // Wait for first button release | 等待第一次按键释放
     while (digitalRead(PIN_BUTTON) == LOW) {
         delay(10);
+        uint32_t holdTime = millis() - bootTime;
+        
+        // Check for WiFi reset (6 seconds hold) | 检测 WiFi 重置（按住 6 秒）
+        if (holdTime >= WIFI_RESET_HOLD_TIME) {
+            Serial.println();
+            Serial.println("  =========================================");
+            Serial.println("  WiFi Reset triggered! (6 seconds hold)");
+            Serial.println("  WiFi 重置触发！（按住 6 秒）");
+            Serial.println("  =========================================");
+            Serial.println("  Clearing credentials and starting AP mode...");
+            
+            // We need to initialize WiFi provisioning first to clear credentials
+            // 需要先初始化 WiFi 配网才能清除凭据
+            // This will be handled after setup() completes, so we return a special marker
+            // 这将在 setup() 完成后处理，所以我们返回一个特殊标记
+            
+            // Wait for button release to avoid re-triggering | 等待按钮释放以避免重复触发
+            while (digitalRead(PIN_BUTTON) == LOW) {
+                delay(10);
+            }
+            
+            // Clear WiFi credentials using Preferences directly
+            // 直接使用 Preferences 清除 WiFi 凭据
+            Preferences wifiPrefs;
+            wifiPrefs.begin("seeed_wifi", false);
+            wifiPrefs.clear();
+            wifiPrefs.end();
+            Serial.println("  WiFi credentials cleared!");
+            Serial.println("  Restarting to enter AP mode...");
+            Serial.flush();
+            delay(500);
+            ESP.restart();
+            
+            // Will never reach here | 永远不会到达这里
+            return BUTTON_NONE;
+        }
+        
         // Timeout check | 超时检查
-        if (millis() - bootTime > MAX_DETECTION_TIME) {
+        if (holdTime > MAX_DETECTION_TIME) {
             Serial.println("  Button held too long, timeout");
             return BUTTON_NONE;
         }
@@ -700,6 +789,7 @@ ButtonEvent detectButtonEventDuringBoot() {
  * Handle Switch 1 toggle (Single click) | 处理开关1切换（单击）
  */
 void handleSwitch1Toggle() {
+    lastButtonEvent = BUTTON_SINGLE;
     switch1->toggle();
     last_activity_time = millis();
     startRGBEffect(RGB_EFFECT_BLINK);
@@ -711,6 +801,7 @@ void handleSwitch1Toggle() {
  * Handle Switch 2 toggle (Double click) | 处理开关2切换（双击）
  */
 void handleSwitch2Toggle() {
+    lastButtonEvent = BUTTON_DOUBLE;
     switch2->toggle();
     last_activity_time = millis();
     startRGBEffect(RGB_EFFECT_SUBTLE_FLICKER, 0xFF8000);  // Orange | 橙色
@@ -722,6 +813,7 @@ void handleSwitch2Toggle() {
  * Handle Switch 3 toggle (Long press) | 处理开关3切换（长按）
  */
 void handleSwitch3Toggle() {
+    lastButtonEvent = BUTTON_LONG;
     switch3->toggle();
     last_activity_time = millis();
     startRGBEffect(RGB_EFFECT_RAINBOW);
@@ -730,41 +822,35 @@ void handleSwitch3Toggle() {
 }
 
 /**
- * Handle Dev Mode toggle (Triple click) | 处理开发模式切换（三击）
- * Enables 3-minute sleep timeout for firmware upload
- * 启用 3 分钟休眠超时以便上传固件
+ * Handle Dev Mode (Triple click) | 处理开发模式（三击）
+ * Sets 3-minute sleep timeout for firmware upload
+ * 设置 3 分钟休眠超时以便上传固件
  */
 void handleDevModeToggle() {
-    devModeEnabled = !devModeEnabled;
+    lastButtonEvent = BUTTON_TRIPLE;
     last_activity_time = millis();
     
-    if (devModeEnabled) {
-        // Dev mode ON: Random color effect + both LEDs blink
-        // 开发模式开启：随机颜色灯效 + 双灯闪烁
-        startRGBEffect(RGB_EFFECT_RANDOM_COLOR);
-        Serial.println("===========================================");
-        Serial.println("  DEV MODE ENABLED - 3 minute sleep timeout");
-        Serial.println("  开发模式已启用 - 3分钟休眠超时");
-        Serial.println("===========================================");
-        // Blink both LEDs to indicate dev mode | 双灯闪烁指示开发模式
-        for (int i = 0; i < 3; i++) {
-            setRedLED(true);
-            setBlueLED(true);
-            delay(100);
-            setRedLED(false);
-            setBlueLED(false);
-            delay(100);
-        }
-        // Restore LED state based on WiFi | 根据 WiFi 状态恢复 LED
-        if (ha.isWiFiConnected()) {
-            setBlueLED(true);
-        } else {
-            setRedLED(true);
-        }
+    // Dev mode: Random color effect + both LEDs blink
+    // 开发模式：随机颜色灯效 + 双灯闪烁
+    startRGBEffect(RGB_EFFECT_RANDOM_COLOR);
+    Serial.println("===========================================");
+    Serial.println("  DEV MODE - 3 minute sleep timeout");
+    Serial.println("  开发模式 - 3分钟休眠超时");
+    Serial.println("===========================================");
+    // Blink both LEDs to indicate dev mode | 双灯闪烁指示开发模式
+    for (int i = 0; i < 3; i++) {
+        setRedLED(true);
+        setBlueLED(true);
+        delay(100);
+        setRedLED(false);
+        setBlueLED(false);
+        delay(100);
+    }
+    // Restore LED state based on WiFi | 根据 WiFi 状态恢复 LED
+    if (ha.isWiFiConnected()) {
+        setBlueLED(true);
     } else {
-        // Dev mode OFF | 开发模式关闭
-        Serial.println("DEV MODE DISABLED - Normal sleep timeout");
-        Serial.println("开发模式已禁用 - 正常休眠超时");
+        setRedLED(true);
     }
 }
 
@@ -885,11 +971,16 @@ const char* getWakeupReasonString() {
 void prepareForDeepSleep() {
     Serial.println("Preparing for deep sleep...");
     
-    // Save switch states to persistent storage | 保存开关状态到持久化存储
-    preferences.putBool("switch1", switch1->getState());
-    preferences.putBool("switch2", switch2->getState());
-    preferences.putBool("switch3", switch3->getState());
-    Serial.println("  - Switch states saved to flash");
+    // Save switch states to persistent storage (only if switches were created)
+    // 保存开关状态到持久化存储（仅当开关已创建时）
+    if (switch1 != nullptr && switch2 != nullptr && switch3 != nullptr) {
+        preferences.putBool("switch1", switch1->getState());
+        preferences.putBool("switch2", switch2->getState());
+        preferences.putBool("switch3", switch3->getState());
+        Serial.println("  - Switch states saved to flash");
+    } else {
+        Serial.println("  - Switches not created (provisioning mode), skipping state save");
+    }
     
     // Turn off battery detection | 关闭电池检测
     setBatteryDetectEnable(false);
@@ -1026,14 +1117,18 @@ void enterDeepSleep() {
 }
 
 /**
- * Get current sleep timeout based on connection state and dev mode
- * 根据连接状态和开发模式获取当前休眠超时
+ * Get current sleep timeout based on last button event and connection state
+ * 根据最后一次按键事件和连接状态获取当前休眠超时
+ * 
+ * Logic: | 逻辑：
+ * - Triple click (dev mode): Always 3 minutes | 三击（开发模式）：始终 3 分钟
+ * - Other clicks: 10s if HA connected, 3 minutes if not | 其他按键：HA连接10秒，未连接3分钟
  */
 uint32_t getCurrentSleepTimeout() {
-    if (devModeEnabled) {
-        return INACTIVITY_TIMEOUT_DEV_MODE;  // 3 minutes in dev mode | 开发模式 3 分钟
+    if (lastButtonEvent == BUTTON_TRIPLE) {
+        return INACTIVITY_TIMEOUT_DEV_MODE;  // 3 minutes for dev mode | 开发模式 3 分钟
     } else if (ha.isHAConnected()) {
-        return INACTIVITY_TIMEOUT_HA_CONNECTED;  // 5 seconds after HA connected | HA 连接后 5 秒
+        return INACTIVITY_TIMEOUT_HA_CONNECTED;  // 10 seconds after HA connected | HA 连接后 10 秒
     } else {
         return INACTIVITY_TIMEOUT_NOT_CONNECTED;  // 3 minutes before HA connected | HA 未连接前 3 分钟
     }
@@ -1059,8 +1154,8 @@ void checkSleepCondition() {
     // Log timeout change | 记录超时变化
     if (currentTimeout != lastLoggedTimeout) {
         Serial.printf("Sleep timeout changed: %lu seconds ", currentTimeout / 1000);
-        if (devModeEnabled) {
-            Serial.println("(Dev mode)");
+        if (lastButtonEvent == BUTTON_TRIPLE) {
+            Serial.println("(Dev mode - triple click)");
         } else if (ha.isHAConnected()) {
             Serial.println("(HA connected)");
         } else {
@@ -1218,6 +1313,64 @@ void setup() {
     // =========================================================================
     
     Serial.println();
+    
+#if USE_WIFI_PROVISIONING
+    // Use web-based WiFi provisioning | 使用网页配网
+    Serial.println("Starting with WiFi provisioning...");
+    Serial.print("  AP Name (if needed): ");
+    Serial.println(AP_SSID);
+    
+    bool wifiConnected = ha.beginWithProvisioning(AP_SSID);
+    
+    // Enable reset button: Long press 6 seconds to clear credentials and restart AP mode
+    // 启用重置按钮：长按 6 秒清除凭据并重启 AP 模式
+    // Note: This works alongside the existing button detection:
+    // 注意：这与现有的按键检测并行工作：
+    // - Long press 1-5s: Toggle Switch 3 | 长按 1-5 秒：切换开关 3
+    // - Long press 6s+: Reset WiFi credentials | 长按 6 秒以上：重置 WiFi 凭据
+    ha.enableResetButton(PIN_BUTTON);
+    
+    if (!wifiConnected) {
+        // Device is in AP mode for WiFi configuration
+        // 设备处于 AP 模式进行 WiFi 配置
+        Serial.println();
+        Serial.println("============================================");
+        Serial.println("  WiFi Provisioning Mode Active!");
+        Serial.println("  WiFi 配网模式已激活！");
+        Serial.println("============================================");
+        Serial.println();
+        Serial.println("To configure WiFi: | 配置 WiFi：");
+        Serial.println("  1. Connect to WiFi: " + String(AP_SSID));
+        Serial.println("     连接到 WiFi：" + String(AP_SSID));
+        Serial.println("  2. Open browser: http://192.168.4.1");
+        Serial.println("     打开浏览器：http://192.168.4.1");
+        Serial.println("  3. Select network and enter password");
+        Serial.println("     选择网络并输入密码");
+        Serial.println();
+        
+        wifiProvisioningMode = true;
+        
+        // Show special LED pattern for provisioning mode
+        // 配网模式显示特殊 LED 模式
+        for (int i = 0; i < 5; i++) {
+            setRedLED(true);
+            setBlueLED(false);
+            delay(200);
+            setRedLED(false);
+            setBlueLED(true);
+            delay(200);
+        }
+        setRedLED(true);  // Red LED on in provisioning mode | 配网模式红灯常亮
+        setBlueLED(false);
+        
+        // In provisioning mode, skip the rest of setup
+        // Entities will be created after WiFi is configured
+        // 在配网模式下，跳过 setup 的其余部分
+        // WiFi 配置后将创建实体
+        return;
+    }
+#else
+    // Use hardcoded credentials | 使用硬编码凭据
     Serial.println("Connecting to WiFi...");
     Serial.print("  SSID: ");
     Serial.println(WIFI_SSID);
@@ -1232,6 +1385,7 @@ void setup() {
             delay(200);
         }
     }
+#endif
     
     Serial.println("WiFi connected!");
     Serial.print("  IP Address: ");
@@ -1349,14 +1503,23 @@ void setup() {
     Serial.println("Button operations:");
     Serial.println("  - Single click: Toggle Switch 1 + Blink effect");
     Serial.println("  - Double click: Toggle Switch 2 + Subtle Flicker (orange)");
-    Serial.println("  - Triple click: Toggle Dev Mode (3 min sleep timeout)");
-    Serial.println("  - Long press (1-2s): Toggle Switch 3 + Rainbow effect");
+    Serial.println("  - Triple click: Dev Mode (3 min sleep timeout)");
+    Serial.println("  - Long press (1-5s): Toggle Switch 3 + Rainbow effect");
+    Serial.println("  - Long press (6s+): Reset WiFi and start AP mode");
     Serial.println();
-    Serial.println("Sleep timeouts (reset on each button action):");
-    Serial.println("  休眠超时（每次按键操作重置）：");
-    Serial.printf("  - HA connected: %d seconds | HA已连接：%d秒\n", INACTIVITY_TIMEOUT_HA_CONNECTED / 1000, INACTIVITY_TIMEOUT_HA_CONNECTED / 1000);
-    Serial.printf("  - HA not connected: %d seconds | HA未连接：%d秒\n", INACTIVITY_TIMEOUT_NOT_CONNECTED / 1000, INACTIVITY_TIMEOUT_NOT_CONNECTED / 1000);
-    Serial.printf("  - Dev mode: %d seconds | 开发模式：%d秒\n", INACTIVITY_TIMEOUT_DEV_MODE / 1000, INACTIVITY_TIMEOUT_DEV_MODE / 1000);
+#if USE_WIFI_PROVISIONING
+    Serial.println("WiFi Provisioning:");
+    Serial.println("  - To reconfigure WiFi: Clear credentials via HA or reflash");
+    Serial.println("    重新配置 WiFi：通过 HA 清除凭据或重新烧录");
+    Serial.println("  - Credentials are saved to flash");
+    Serial.println("    凭据已保存到 Flash");
+    Serial.println();
+#endif
+    Serial.println("Sleep timeouts (based on LAST button action):");
+    Serial.println("  休眠超时（根据最后一次按键决定）：");
+    Serial.printf("  - Single/Double/Long (HA connected): %d seconds\n", INACTIVITY_TIMEOUT_HA_CONNECTED / 1000);
+    Serial.printf("  - Single/Double/Long (HA not connected): %d seconds\n", INACTIVITY_TIMEOUT_NOT_CONNECTED / 1000);
+    Serial.printf("  - Triple click (Dev mode): %d seconds\n", INACTIVITY_TIMEOUT_DEV_MODE / 1000);
     Serial.println();
     Serial.println("Waiting for events...");
     Serial.println();
@@ -1365,6 +1528,46 @@ void setup() {
 void loop() {
     // Must call! Handle network events | 必须调用！处理网络事件
     ha.handle();
+    
+    // If in provisioning mode, just handle the AP and don't do anything else
+    // 如果处于配网模式，只处理 AP，不做其他事情
+    if (wifiProvisioningMode) {
+        // Check if user pressed button during provisioning
+        // 检查用户是否在配网期间按下按钮
+        ButtonEvent event = detectButtonEvent();
+        if (event == BUTTON_LONG) {
+            // Long press in provisioning mode: clear credentials and restart
+            // 配网模式下长按：清除凭据并重启
+            Serial.println("Long press detected - clearing credentials and restarting...");
+            ha.clearWiFiCredentials();
+            delay(1000);
+            ESP.restart();
+        }
+        
+        // Any button press resets activity timer | 任何按键操作重置活动计时器
+        if (event != BUTTON_NONE) {
+            last_activity_time = millis();
+        }
+        
+        // Update RGB LED effect for visual feedback | 更新 RGB LED 灯效提供视觉反馈
+        updateRGBEffect();
+        
+        // Check for sleep timeout in provisioning mode (3 minutes to save battery)
+        // 配网模式下检查休眠超时（3分钟，保护电池）
+        // This is important for factory firmware - device may sit in packaging for months!
+        // 这对于出厂固件很重要 - 设备可能在包装中放置数月！
+        if (millis() - last_activity_time >= INACTIVITY_TIMEOUT_NOT_CONNECTED) {
+            Serial.println();
+            Serial.println("Provisioning mode timeout (3 min) - entering deep sleep to save battery");
+            Serial.println("配网模式超时（3分钟）- 进入深度睡眠以保护电池");
+            Serial.println("Press button to wake up and try again");
+            Serial.println("按下按钮唤醒并重试");
+            enterDeepSleep();
+        }
+        
+        delay(10);
+        return;
+    }
     
     // Check WiFi status | 检查 WiFi 状态
     checkWiFiStatus();

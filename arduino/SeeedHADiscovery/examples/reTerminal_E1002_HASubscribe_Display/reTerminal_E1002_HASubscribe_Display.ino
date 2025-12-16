@@ -354,7 +354,7 @@ void drawDashboard() {
 void drawStartupScreen(const char* status, const char* ip = nullptr) {
 #ifdef EPAPER_ENABLE
     epaper.fillScreen(TFT_WHITE);
-    
+
     // Logo area | Logo 区域
     int centerX = SCREEN_WIDTH / 2;
     int centerY = SCREEN_HEIGHT / 2 - 30;
@@ -377,7 +377,7 @@ void drawStartupScreen(const char* status, const char* ip = nullptr) {
     epaper.drawString("Seeed HA Discovery", centerX - 100, centerY + 50);
     
     // Status text | 状态文字
-    epaper.setTextColor(TFT_BLUE);
+        epaper.setTextColor(TFT_BLUE);
     epaper.setTextSize(2);
     epaper.drawString(status, centerX - 150, centerY + 100);
     

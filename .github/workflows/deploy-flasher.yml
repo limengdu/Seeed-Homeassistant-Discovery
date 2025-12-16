@@ -1,0 +1,104 @@
+# GitHub Actions workflow for deploying the web flasher to GitHub Pages
+# 用于将网页烧录器部署到 GitHub Pages 的工作流
+#
+# This workflow:
+# 1. Builds firmware using the build-firmware workflow
+# 2. Copies firmware binaries to the flasher directory
+# 3. Deploys to GitHub Pages
+#
+# 此工作流：
+# 1. 使用 build-firmware 工作流构建固件
+# 2. 将固件二进制文件复制到烧录器目录
+# 3. 部署到 GitHub Pages
+
+name: Deploy Web Flasher
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'arduino/**'
+      - 'docs/flasher/**'
+      - '.github/workflows/deploy-flasher.yml'
+      - '.github/workflows/build-firmware.yml'
+  workflow_dispatch:  # Allow manual trigger | 允许手动触发
+
+# Allow only one concurrent deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # Build firmware first | 首先构建固件
+  build-firmware:
+    uses: ./.github/workflows/build-firmware.yml
+
+  # Deploy to GitHub Pages | 部署到 GitHub Pages
+  deploy:
+    needs: build-firmware
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download firmware artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: all-firmware
+          path: firmware-download/
+
+      - name: Prepare deployment directory
+        run: |
+          # Create deployment directory | 创建部署目录
+          mkdir -p deploy/flasher/firmware
+          
+          # Copy flasher HTML and assets | 复制烧录器 HTML 和资源
+          cp docs/flasher/index.html deploy/flasher/
+          cp docs/flasher/README.md deploy/flasher/
+          cp docs/flasher/firmware-config.yml deploy/flasher/
+          
+          # Copy firmware binaries | 复制固件二进制文件
+          if [ -d "firmware-download" ]; then
+            cp -r firmware-download/* deploy/flasher/firmware/
+          fi
+          
+          # Create index for root | 为根目录创建索引
+          cat > deploy/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <meta http-equiv="refresh" content="0; url=flasher/">
+            <title>Redirecting...</title>
+          </head>
+          <body>
+            <p>Redirecting to <a href="flasher/">Web Flasher</a>...</p>
+          </body>
+          </html>
+          EOF
+          
+          echo "Deployment directory structure:"
+          find deploy -type f
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: deploy/
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+

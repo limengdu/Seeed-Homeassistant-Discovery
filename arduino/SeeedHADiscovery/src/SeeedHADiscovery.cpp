@@ -11,6 +11,7 @@
  */
 
 #include "SeeedHADiscovery.h"
+#include "SeeedWiFiProvisioning.h"
 
 // =============================================================================
 // SeeedHASensor Implementation | SeeedHASensor 实现
@@ -261,6 +262,7 @@ SeeedHADiscovery::SeeedHADiscovery() :
     _httpServer(nullptr),
     _wsServer(nullptr),
     _wsClientConnected(false),
+    _provisioning(nullptr),
     _haStateCallback(nullptr),
     _debug(false),
     _lastHeartbeat(0)
@@ -280,6 +282,11 @@ SeeedHADiscovery::~SeeedHADiscovery() {
     if (_wsServer != nullptr) {
         _wsServer->close();
         delete _wsServer;
+    }
+
+    // Cleanup WiFi provisioning | 清理 WiFi 配网
+    if (_provisioning != nullptr) {
+        delete _provisioning;
     }
 
     // Cleanup sensors | 清理传感器
@@ -372,6 +379,95 @@ bool SeeedHADiscovery::begin(const char* ssid, const char* password) {
     _log("====================================");
 
     return true;
+}
+
+bool SeeedHADiscovery::beginWithProvisioning(const String& apSSID) {
+    _log("====================================");
+    _log("Seeed HA Discovery starting with provisioning...");
+    _log("====================================");
+
+    // Create provisioning instance if not exists
+    // 如果不存在则创建配网实例
+    if (_provisioning == nullptr) {
+        _provisioning = new SeeedWiFiProvisioning();
+    }
+
+    // Configure provisioning | 配置配网
+    _provisioning->setAPSSID(apSSID);
+    _provisioning->enableDebug(_debug);
+
+    // Try to connect using saved credentials or start AP mode
+    // 尝试使用保存的凭据连接或启动 AP 模式
+    bool connected = _provisioning->begin();
+
+    if (connected) {
+        // WiFi connected, start HA services | WiFi 已连接，启动 HA 服务
+        _log("WiFi connected via provisioning!");
+        _log("IP Address: " + WiFi.localIP().toString());
+        _log("Device ID: " + _deviceId);
+
+        // Start mDNS service | 启动 mDNS 服务
+        _setupMDNS();
+
+        // Start HTTP server | 启动 HTTP 服务器
+        _setupHTTP();
+
+        // Start WebSocket server | 启动 WebSocket 服务器
+        _setupWebSocket();
+
+        _log("====================================");
+        _log("All services started!");
+        _log("Open in browser: http://" + WiFi.localIP().toString());
+        _log("====================================");
+
+        return true;
+    } else {
+        // AP mode is active for configuration
+        // AP 模式已激活用于配置
+        _log("====================================");
+        _log("AP Mode Active for WiFi Configuration");
+        _log("Connect to WiFi: " + apSSID);
+        _log("Open browser: http://192.168.4.1");
+        _log("====================================");
+
+        return false;
+    }
+}
+
+bool SeeedHADiscovery::isProvisioningActive() const {
+    if (_provisioning != nullptr) {
+        return _provisioning->isAPModeActive();
+    }
+    return false;
+}
+
+void SeeedHADiscovery::clearWiFiCredentials() {
+    if (_provisioning != nullptr) {
+        _provisioning->clearCredentials();
+    } else {
+        // Create temporary instance to clear credentials
+        // 创建临时实例来清除凭据
+        SeeedWiFiProvisioning temp;
+        temp.clearCredentials();
+    }
+    _log("WiFi credentials cleared");
+}
+
+void SeeedHADiscovery::enableResetButton(int pin, bool activeLow) {
+    if (_provisioning != nullptr) {
+        _provisioning->enableResetButton(pin, activeLow);
+        _log("Reset button enabled on GPIO" + String(pin) + 
+             " - long press 6s to reset WiFi");
+    } else {
+        _log("Warning: WiFi provisioning not initialized, reset button not enabled");
+    }
+}
+
+void SeeedHADiscovery::disableResetButton() {
+    if (_provisioning != nullptr) {
+        _provisioning->disableResetButton();
+        _log("Reset button disabled");
+    }
 }
 
 void SeeedHADiscovery::_setupMDNS() {
@@ -999,6 +1095,12 @@ void SeeedHADiscovery::clearHAStates() {
 }
 
 void SeeedHADiscovery::handle() {
+    // Handle WiFi provisioning if active | 如果配网激活则处理配网
+    if (_provisioning != nullptr && _provisioning->isAPModeActive()) {
+        _provisioning->handle();
+        return;  // Don't handle other services in AP mode | AP 模式下不处理其他服务
+    }
+
     // Handle HTTP requests | 处理 HTTP 请求
     if (_httpServer != nullptr) {
         _httpServer->handleClient();

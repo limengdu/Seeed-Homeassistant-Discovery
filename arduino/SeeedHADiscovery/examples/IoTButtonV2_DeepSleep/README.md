@@ -4,11 +4,19 @@ A low-power IoT button implementation with deep sleep capability for ESP32-C6, f
 
 ## Features
 
+### 📶 WiFi Provisioning (NEW!)
+- **Web-based Configuration**: No need to hardcode WiFi credentials
+- **Captive Portal**: On first boot, device creates AP "Seeed_IoT_Button_V2_AP"
+- **Easy Setup**: Connect to AP, open browser, select network, enter password
+- **Credential Persistence**: WiFi settings saved to flash, survives reboot
+- **Long Press Reset**: In provisioning mode, long press clears credentials
+
 ### 🔘 Multi-Click Button Detection
 - **Single Click**: Toggle Switch 1 + Pink-purple blink effect
 - **Double Click**: Toggle Switch 2 + Orange subtle flicker effect
 - **Triple Click**: Toggle Developer Mode (3-minute sleep timeout for firmware upload)
 - **Long Press (1-5s)**: Toggle Switch 3 + Rainbow gradient effect
+- **Long Press (6s+)**: Reset WiFi credentials and start AP mode for re-provisioning
 
 ### 🔋 Battery Monitoring
 - Real-time battery voltage measurement via ADC
@@ -114,11 +122,26 @@ Make sure you have the ESP32 board package installed:
 
 ## Quick Start
 
-### 1. Configure WiFi Credentials
+### 1. Configure WiFi (Choose One Method)
 
-Edit the following lines in the sketch:
+#### Option A: Web-based Provisioning (Recommended)
+
+No code changes needed! WiFi is configured via web browser:
+
+1. Upload the sketch (with `USE_WIFI_PROVISIONING` set to `true`)
+2. On first boot, device creates AP: **Seeed_IoT_Button_V2_AP**
+3. Connect your phone/computer to this AP
+4. Browser opens automatically, or navigate to `http://192.168.4.1`
+5. Select your WiFi network and enter password
+6. Device saves credentials and restarts
+
+#### Option B: Hardcoded Credentials
+
+Set `USE_WIFI_PROVISIONING` to `false` and edit the credentials:
 
 ```cpp
+#define USE_WIFI_PROVISIONING false
+
 const char* WIFI_SSID = "Your_WiFi_SSID";
 const char* WIFI_PASSWORD = "Your_WiFi_Password";
 ```
@@ -129,8 +152,11 @@ const char* WIFI_PASSWORD = "Your_WiFi_Password";
 2. Configure settings:
    - Flash Size: 4MB
    - CPU Frequency: 80MHz (recommended for low power)
+   - **Partition Scheme: "Huge APP (3MB No OTA/1MB SPIFFS)"** ⚠️ Important!
    - Upload Speed: 921600
 3. Upload the sketch
+
+> ⚠️ **Important**: If you see the error `text section exceeds available space in board`, you must change the Partition Scheme. Go to **Tools** → **Partition Scheme** and select **"Huge APP (3MB No OTA/1MB SPIFFS)"** or **"Minimal SPIFFS (1.9MB APP with OTA/190KB SPIFFS)"**.
 
 ### 3. Add to Home Assistant
 
@@ -146,8 +172,37 @@ const char* WIFI_PASSWORD = "Your_WiFi_Password";
 |-----|-------|---------|
 | Red | ON | WiFi disconnected / Connecting |
 | Blue | ON | WiFi connected |
+| Red + Blue | Alternating (5x) | WiFi provisioning mode active |
 | Red + Blue | Blinking (3x) | Developer mode enabled |
 | RGB | Various effects | Button action feedback |
+
+## WiFi Provisioning Mode
+
+When `USE_WIFI_PROVISIONING` is enabled (default), the device uses web-based WiFi configuration:
+
+### First Boot / No Credentials
+1. Device creates AP hotspot: **Seeed_IoT_Button_V2_AP**
+2. Red/Blue LEDs alternate to indicate provisioning mode
+3. Connect to AP with your phone or computer
+4. Browser opens captive portal automatically
+5. If not, navigate to `http://192.168.4.1`
+
+### Configuration Interface
+- **Network List**: Shows available WiFi networks with signal strength
+- **Security**: Lock icon indicates password-protected networks
+- **Refresh**: Click to rescan for networks
+- **Reset**: Clear saved credentials
+
+### Provisioning Mode Controls
+- **Long Press (1-5s)**: Clear saved WiFi credentials and restart
+- **Any button press**: Resets the 3-minute timeout
+- Device will enter deep sleep after **3 minutes** of inactivity to save battery
+- This is important for factory firmware - devices may sit in packaging for months!
+
+### Reconfiguring WiFi
+To change WiFi settings:
+1. Long press the button during provisioning mode, OR
+2. Call `ha.clearWiFiCredentials()` in code and reupload
 
 ## Developer Mode
 
@@ -177,12 +232,16 @@ The device automatically enters deep sleep after a period of inactivity:
 | Single Click | ≤ 1 second | No next press within 0.5s |
 | Double Click | ≤ 1 second each | ≤ 1 second between clicks |
 | Triple Click | ≤ 0.8 second each | ≤ 0.8 second between clicks |
-| Long Press | 1-5 seconds | N/A |
+| Long Press (Switch 3) | 1-5 seconds | N/A |
+| Long Press (WiFi Reset) | ≥ 6 seconds | N/A |
+
+> **Note**: The 6-second WiFi reset works **both when awake AND when waking from deep sleep**. Simply hold the button for 6+ seconds at any time to reset WiFi credentials and enter AP mode.
 
 ## Persistent Storage
 
 The following data is saved to flash and survives deep sleep/reset:
 
+- WiFi credentials (SSID and password) - if using provisioning
 - Switch 1/2/3 states
 - Last battery percentage (for anti-jump filter)
 
@@ -194,6 +253,11 @@ The following data is saved to flash and survives deep sleep/reset:
 | Deep Sleep | ~10µA | GPIO wake-up configured |
 
 ## Troubleshooting
+
+### "text section exceeds available space in board" error
+- This error means the code is too large for the default partition scheme
+- **Solution**: Go to **Tools** → **Partition Scheme** → Select **"Huge APP (3MB No OTA/1MB SPIFFS)"**
+- Alternative: Select **"Minimal SPIFFS (1.9MB APP with OTA/190KB SPIFFS)"**
 
 ### Device won't wake from deep sleep
 - Ensure GPIO2 is properly connected to the button

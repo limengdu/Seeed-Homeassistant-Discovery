@@ -64,6 +64,9 @@
 #include <vector>          // Dynamic array | 动态数组
 #include <map>             // Key-value container | 键值对容器
 
+// Forward declaration for WiFi provisioning | WiFi 配网前向声明
+class SeeedWiFiProvisioning;
+
 // =============================================================================
 // Constants | 常量定义
 // =============================================================================
@@ -628,6 +631,92 @@ public:
      */
     bool begin(const char* ssid, const char* password);
 
+    /**
+     * Begin with WiFi provisioning support
+     * 使用 WiFi 配网支持启动
+     *
+     * This method provides WiFi configuration:
+     * 这个方法提供 WiFi 配置：
+     * 1. Try to connect using saved credentials (if any)
+     *    尝试使用保存的凭据连接（如果有）
+     * 2. If no credentials or connection fails, start AP mode
+     *    如果没有凭据或连接失败，启动 AP 模式
+     * 3. Users can configure WiFi via captive portal
+     *    用户可以通过强制门户配置 WiFi
+     * 4. Credentials are saved and used on next boot
+     *    凭据被保存并在下次启动时使用
+     *
+     * @param apSSID AP hotspot name (default: "Seeed_IoT_Device_AP")
+     *               AP 热点名称（默认："Seeed_IoT_Device_AP"）
+     * @return true if WiFi connected, false if AP mode is active (call handle() in loop)
+     *         WiFi 已连接返回 true，AP 模式激活返回 false（在 loop 中调用 handle()）
+     *
+     * Example:
+     * 示例：
+     * ```cpp
+     * SeeedHADiscovery ha;
+     * bool wifiConnected = false;
+     *
+     * void setup() {
+     *     wifiConnected = ha.beginWithProvisioning("My_IoT_Device_AP");
+     * }
+     *
+     * void loop() {
+     *     ha.handle();  // Must call! Handles both HA and provisioning
+     *                   // 必须调用！处理 HA 和配网
+     * }
+     * ```
+     */
+    bool beginWithProvisioning(const String& apSSID = "Seeed_IoT_Device_AP");
+
+    /**
+     * Check if WiFi provisioning (AP mode) is active
+     * 检查 WiFi 配网（AP 模式）是否激活
+     *
+     * @return true if AP mode is active for provisioning
+     *         如果 AP 模式正在配网则返回 true
+     */
+    bool isProvisioningActive() const;
+
+    /**
+     * Get WiFi provisioning instance
+     * 获取 WiFi 配网实例
+     *
+     * @return Pointer to SeeedWiFiProvisioning instance, or nullptr if not using provisioning
+     *         SeeedWiFiProvisioning 实例指针，如果未使用配网则返回 nullptr
+     */
+    SeeedWiFiProvisioning* getProvisioning() { return _provisioning; }
+
+    /**
+     * Clear saved WiFi credentials
+     * 清除保存的 WiFi 凭据
+     *
+     * This will clear saved credentials from flash.
+     * On next boot, device will enter AP mode for reconfiguration.
+     * 这会从 Flash 中清除保存的凭据。
+     * 下次启动时，设备将进入 AP 模式重新配置。
+     */
+    void clearWiFiCredentials();
+
+    /**
+     * Enable reset button for WiFi re-provisioning
+     * 启用重置按钮用于重新配网
+     *
+     * Long press the button for 6 seconds to clear credentials and restart AP mode.
+     * 长按按钮 6 秒清除凭据并重启 AP 模式。
+     *
+     * @param pin GPIO pin number for the reset button | 重置按钮的 GPIO 引脚号
+     * @param activeLow true if button is active LOW (default), false if active HIGH
+     *                  按钮是否低电平有效（默认），高电平有效则为 false
+     */
+    void enableResetButton(int pin, bool activeLow = true);
+
+    /**
+     * Disable reset button
+     * 禁用重置按钮
+     */
+    void disableResetButton();
+
     // =========================================================================
     // Sensor Management | 传感器管理
     // =========================================================================
@@ -856,6 +945,11 @@ private:
     WebServer* _httpServer;         // HTTP server | HTTP 服务器
     WebSocketsServer* _wsServer;    // WebSocket server | WebSocket 服务器
     bool _wsClientConnected;        // Whether WebSocket client connected | 是否有 WebSocket 客户端连接
+
+    // -------------------------------------------------------------------------
+    // WiFi Provisioning | WiFi 配网
+    // -------------------------------------------------------------------------
+    SeeedWiFiProvisioning* _provisioning;  // WiFi provisioning instance | WiFi 配网实例
 
     // -------------------------------------------------------------------------
     // Sensor List | 传感器列表
