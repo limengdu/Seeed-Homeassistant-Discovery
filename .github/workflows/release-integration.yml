@@ -1,0 +1,84 @@
+# Automatically create GitHub Release when HA integration version changes
+# 当 HA 插件版本变更时自动创建 GitHub Release
+#
+# This workflow monitors manifest.json for version changes and creates releases
+# so HACS can detect updates automatically.
+
+name: Release Integration
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'custom_components/seeed_ha_discovery/manifest.json'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version from manifest
+        id: version
+        run: |
+          VERSION=$(jq -r '.version' custom_components/seeed_ha_discovery/manifest.json)
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Integration version: ${VERSION}"
+
+      - name: Check if release exists
+        id: check
+        run: |
+          if gh release view "v${{ steps.version.outputs.version }}" > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Release v${{ steps.version.outputs.version }} already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Release v${{ steps.version.outputs.version }} does not exist, will create"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Generate release notes
+        if: steps.check.outputs.exists == 'false'
+        id: notes
+        run: |
+          # Get commits since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            CHANGES=$(git log ${LAST_TAG}..HEAD --pretty=format:"- %s" --no-merges | head -20)
+          else
+            CHANGES=$(git log --pretty=format:"- %s" --no-merges -10)
+          fi
+          
+          # Create release notes
+          cat > release_notes.md << EOF
+          ## Seeed HA Discovery v${{ steps.version.outputs.version }}
+          
+          ### Changes
+          ${CHANGES}
+          
+          ---
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${LAST_TAG}...v${{ steps.version.outputs.version }}
+          EOF
+          
+          cat release_notes.md
+
+      - name: Create Release
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          gh release create "v${{ steps.version.outputs.version }}" \
+            --title "v${{ steps.version.outputs.version }}" \
+            --notes-file release_notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Release created
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          echo "✅ Release v${{ steps.version.outputs.version }} created successfully!"
+          echo "HACS will now detect this update."
+
