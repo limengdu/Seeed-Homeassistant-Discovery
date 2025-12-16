@@ -64,9 +64,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Arduino CLI
-        uses: arduino/setup-arduino-cli@v1
-        with:
-          version: ${{ env.ARDUINO_CLI_VERSION }}
+        run: |
+          # Download and install Arduino CLI manually (more reliable)
+          # 手动下载安装 Arduino CLI（更可靠）
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
+          arduino-cli version
 
       - name: Install platform and libraries
         run: |
