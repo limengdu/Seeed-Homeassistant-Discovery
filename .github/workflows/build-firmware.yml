@@ -647,3 +647,53 @@ jobs:
           body_path: release_body.md
           files: firmware/*.zip
         if: steps.prep.outputs.version != ''
+
+  # Deploy firmware to GitHub Pages (docs/flasher/firmware/)
+  deploy-flasher:
+    needs: combine
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - uses: actions/download-artifact@v4
+        with:
+          name: all-firmware
+          path: firmware-temp/
+        continue-on-error: true
+      
+      - name: Deploy to docs/flasher/firmware
+        run: |
+          if [ ! -d "firmware-temp" ] || [ -z "$(ls -A firmware-temp 2>/dev/null)" ]; then
+            echo "No firmware to deploy"
+            exit 0
+          fi
+          
+          # Clear existing firmware (but keep the directory structure)
+          rm -rf docs/flasher/firmware/*
+          mkdir -p docs/flasher/firmware
+          
+          # Copy all firmware to docs folder
+          cp -r firmware-temp/* docs/flasher/firmware/
+          
+          echo "Deployed firmware:"
+          find docs/flasher/firmware -type f | head -50
+      
+      - name: Commit and push firmware
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # Check if there are changes to commit
+          if git diff --quiet docs/flasher/firmware/; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          
+          git add docs/flasher/firmware/
+          git commit -m "chore: deploy firmware to web flasher [skip ci]"
+          git push
