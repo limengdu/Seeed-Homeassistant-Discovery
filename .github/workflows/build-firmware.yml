@@ -218,6 +218,9 @@ jobs:
           - chip: C3
             fqbn: "esp32:esp32:esp32c3:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
             family: "ESP32-C3"
+          - chip: C5
+            fqbn: "esp32:esp32:esp32c5:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
+            family: "ESP32-C5"
           - chip: C6
             fqbn: "esp32:esp32:esp32c6:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
             family: "ESP32-C6"
@@ -263,6 +266,9 @@ jobs:
           - chip: C3
             fqbn: "esp32:esp32:esp32c3:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
             family: "ESP32-C3"
+          - chip: C5
+            fqbn: "esp32:esp32:esp32c5:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
+            family: "ESP32-C5"
           - chip: C6
             fqbn: "esp32:esp32:esp32c6:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
             family: "ESP32-C6"
@@ -308,6 +314,9 @@ jobs:
           - chip: C3
             fqbn: "esp32:esp32:esp32c3:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
             family: "ESP32-C3"
+          - chip: C5
+            fqbn: "esp32:esp32:esp32c5:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
+            family: "ESP32-C5"
           - chip: C6
             fqbn: "esp32:esp32:esp32c6:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
             family: "ESP32-C6"
@@ -353,6 +362,9 @@ jobs:
           - chip: C3
             fqbn: "esp32:esp32:esp32c3:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
             family: "ESP32-C3"
+          - chip: C5
+            fqbn: "esp32:esp32:esp32c5:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
+            family: "ESP32-C5"
           - chip: C6
             fqbn: "esp32:esp32:esp32c6:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
             family: "ESP32-C6"
@@ -398,6 +410,9 @@ jobs:
           - chip: C3
             fqbn: "esp32:esp32:esp32c3:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
             family: "ESP32-C3"
+          - chip: C5
+            fqbn: "esp32:esp32:esp32c5:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
+            family: "ESP32-C5"
           - chip: C6
             fqbn: "esp32:esp32:esp32c6:CDCOnBoot=cdc,PartitionScheme=huge_app,CPUFreq=80,FlashMode=qio,FlashSize=4M"
             family: "ESP32-C6"
@@ -464,7 +479,7 @@ jobs:
           # Multi-chip firmware (Universal) - create manifest with all chips
           for fw in WiFiProvisioning ButtonSwitch LEDSwitch HAStateSubscribe TemperatureHumidity; do
             mkdir -p "combined-firmware/${fw}"
-            for chip in C3 C6 S3; do
+            for chip in C3 C5 C6 S3; do
               if [ -d "all-firmware/firmware-${fw}-${chip}" ]; then
                 mkdir -p "combined-firmware/${fw}/${chip}"
                 cp -r "all-firmware/firmware-${fw}-${chip}/"* "combined-firmware/${fw}/${chip}/"
@@ -473,10 +488,10 @@ jobs:
             done
             
             # Create multi-chip manifest
-            if [ -d "combined-firmware/${fw}/C3" ] || [ -d "combined-firmware/${fw}/C6" ] || [ -d "combined-firmware/${fw}/S3" ]; then
+            if [ -d "combined-firmware/${fw}/C3" ] || [ -d "combined-firmware/${fw}/C5" ] || [ -d "combined-firmware/${fw}/C6" ] || [ -d "combined-firmware/${fw}/S3" ]; then
               echo '{"name":"'"${fw}"'","version":"1.0.0","new_install_prompt_erase":true,"builds":[' > "combined-firmware/${fw}/manifest.json"
               FIRST=true
-              for chip in C3 C6 S3; do
+              for chip in C3 C5 C6 S3; do
                 if [ -d "combined-firmware/${fw}/${chip}" ]; then
                   [ "$FIRST" = false ] && echo ',' >> "combined-firmware/${fw}/manifest.json"
                   FIRST=false
@@ -547,11 +562,11 @@ jobs:
           ### 📦 Universal Firmware (Auto Chip Detection)
           | Firmware | Supported Chips | Description |
           |----------|-----------------|-------------|
-          | WiFiProvisioning | C3/C6/S3 | WiFi setup demo |
-          | ButtonSwitch | C3/C6/S3 | Button control |
-          | LEDSwitch | C3/C6/S3 | LED control |
-          | HAStateSubscribe | C3/C6/S3 | HA state display |
-          | TemperatureHumidity | C3/C6/S3 | Sensor demo |
+          | WiFiProvisioning | C3/C5/C6/S3 | WiFi setup demo |
+          | ButtonSwitch | C3/C5/C6/S3 | Button control |
+          | LEDSwitch | C3/C5/C6/S3 | LED control |
+          | HAStateSubscribe | C3/C5/C6/S3 | HA state display |
+          | TemperatureHumidity | C3/C5/C6/S3 | Sensor demo |
           
           ### 📝 Changelog
           ${CHANGELOG}
