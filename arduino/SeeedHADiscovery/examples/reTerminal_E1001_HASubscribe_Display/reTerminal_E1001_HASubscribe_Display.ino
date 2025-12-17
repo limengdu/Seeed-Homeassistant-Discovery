@@ -193,14 +193,13 @@ void setStatusLED(bool on) {
 }
 
 /**
- * Check reset button and provide visual feedback
- * 检查重置按钮并提供视觉反馈
+ * Check reset button and handle WiFi reset with visual feedback
+ * 检查重置按钮并处理 WiFi 重置（带视觉反馈）
  * 
- * This function monitors the reset button to provide LED feedback
- * when the button has been held long enough (6 seconds).
- * The actual WiFi reset is handled by ha.enableResetButton().
- * 此函数监控重置按钮，当按钮按住足够长时间（6秒）时提供 LED 反馈。
- * 实际的 WiFi 重置由 ha.enableResetButton() 处理。
+ * This function monitors the reset button, provides LED feedback at 6 seconds,
+ * and triggers WiFi reset when button is released after threshold.
+ * 此函数监控重置按钮，在 6 秒时提供 LED 反馈，
+ * 并在按钮释放后触发 WiFi 重置。
  */
 void checkResetButtonFeedback() {
     bool currentState = (digitalRead(PIN_RESET_BUTTON) == LOW);  // Button pressed when LOW
@@ -242,14 +241,33 @@ void checkResetButtonFeedback() {
     
     // Button released | 按钮释放
     if (!currentState && resetButtonPressed) {
+        uint32_t holdTime = now - resetButtonPressTime;
         resetButtonPressed = false;
         
-        // Turn off LED if we gave feedback | 如果给了反馈就关闭 LED
-        if (resetFeedbackGiven) {
+        // If held long enough and feedback was given, trigger WiFi reset
+        // 如果按住足够长时间并且已给反馈，触发 WiFi 重置
+        if (resetFeedbackGiven && holdTime >= WIFI_RESET_HOLD_TIME) {
+            Serial1.println();
+            Serial1.println("=========================================");
+            Serial1.println("  WiFi Reset triggered!");
+            Serial1.println("  WiFi 重置已触发！");
+            Serial1.println("=========================================");
+            Serial1.println("  Clearing credentials and restarting...");
+            Serial1.println("  正在清除凭据并重启...");
+            
             setStatusLED(false);
-            // Note: The actual WiFi reset is handled by ha.enableResetButton()
-            // 注意：实际的 WiFi 重置由 ha.enableResetButton() 处理
+            
+            // Clear WiFi credentials and restart
+            // 清除 WiFi 凭据并重启
+            ha.clearWiFiCredentials();
+            Serial1.flush();
+            delay(500);
+            ESP.restart();
+            // Never reaches here | 永远不会到达这里
         }
+        
+        // Turn off LED | 关闭 LED
+        setStatusLED(false);
         resetFeedbackGiven = false;
     }
 }

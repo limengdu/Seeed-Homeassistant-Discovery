@@ -188,8 +188,8 @@ void setStatusLED(bool on) {
 }
 
 /**
- * Check reset button and provide visual feedback
- * 检查重置按钮并提供视觉反馈
+ * Check reset button and handle WiFi reset with visual feedback
+ * 检查重置按钮并处理 WiFi 重置（带视觉反馈）
  */
 void checkResetButtonFeedback() {
     bool currentState = (digitalRead(PIN_RESET_BUTTON) == LOW);
@@ -213,6 +213,8 @@ void checkResetButtonFeedback() {
             Serial1.println("=========================================");
             Serial1.println("  WiFi Reset threshold reached (6s)!");
             Serial1.println("  WiFi 重置阈值已达到（6秒）！");
+            Serial1.println("  Release button to reset WiFi...");
+            Serial1.println("  松开按钮以重置 WiFi...");
             Serial1.println("=========================================");
             
             // Visual feedback: LED rapid blink | 视觉反馈：LED 快速闪烁
@@ -228,10 +230,33 @@ void checkResetButtonFeedback() {
     
     // Button released | 按钮释放
     if (!currentState && resetButtonPressed) {
+        uint32_t holdTime = now - resetButtonPressTime;
         resetButtonPressed = false;
-        if (resetFeedbackGiven) {
+        
+        // If held long enough and feedback was given, trigger WiFi reset
+        // 如果按住足够长时间并且已给反馈，触发 WiFi 重置
+        if (resetFeedbackGiven && holdTime >= WIFI_RESET_HOLD_TIME) {
+            Serial1.println();
+            Serial1.println("=========================================");
+            Serial1.println("  WiFi Reset triggered!");
+            Serial1.println("  WiFi 重置已触发！");
+            Serial1.println("=========================================");
+            Serial1.println("  Clearing credentials and restarting...");
+            Serial1.println("  正在清除凭据并重启...");
+            
             setStatusLED(false);
+            
+            // Clear WiFi credentials and restart
+            // 清除 WiFi 凭据并重启
+            ha.clearWiFiCredentials();
+            Serial1.flush();
+            delay(500);
+            ESP.restart();
+            // Never reaches here | 永远不会到达这里
         }
+        
+        // Turn off LED | 关闭 LED
+        setStatusLED(false);
         resetFeedbackGiven = false;
     }
 }
