@@ -163,9 +163,13 @@ bool lastHAConnected = false;
 bool wifiProvisioningMode = false;
 
 // Reset button state tracking | 重置按钮状态跟踪
-uint32_t resetButtonPressTime = 0;
-bool resetButtonPressed = false;
-bool resetFeedbackGiven = false;
+volatile uint32_t resetButtonPressTime = 0;
+volatile bool resetButtonPressed = false;
+volatile bool resetFeedbackGiven = false;
+volatile bool wifiResetRequested = false;  // Flag to trigger reset from main loop | 主循环触发重置的标志
+
+// RTOS task handle for reset button | 重置按钮的 RTOS 任务句柄
+TaskHandle_t resetButtonTaskHandle = NULL;
 
 // Entity data structure | 实体数据结构
 struct EntityDisplay {
@@ -196,88 +200,86 @@ void setStatusLED(bool on) {
 }
 
 /**
- * Check reset button and handle WiFi reset with visual feedback
- * 检查重置按钮并处理 WiFi 重置（带视觉反馈）
+ * Reset button detection task (runs on Core 0)
+ * 重置按钮检测任务（运行在 Core 0）
  * 
- * This function monitors the reset button, provides LED feedback at 6 seconds,
- * and triggers WiFi reset when button is released after threshold.
- * 此函数监控重置按钮，在 6 秒时提供 LED 反馈，
- * 并在按钮释放后触发 WiFi 重置。
+ * This task runs independently on Core 0, monitoring the reset button
+ * without blocking the main loop (which handles WiFi/HTTP on Core 1).
+ * 此任务独立运行在 Core 0，监控重置按钮，
+ * 不会阻塞主循环（主循环在 Core 1 处理 WiFi/HTTP）。
  */
-void checkResetButtonFeedback() {
-    bool currentState = (digitalRead(PIN_RESET_BUTTON) == LOW);  // Button pressed when LOW
-    uint32_t now = millis();
+void resetButtonTask(void* parameter) {
+    Serial1.println("[RTOS] Reset button task started on Core " + String(xPortGetCoreID()));
     
-    // Button just pressed | 按钮刚被按下
-    if (currentState && !resetButtonPressed) {
-        resetButtonPressed = true;
-        resetButtonPressTime = now;
-        resetFeedbackGiven = false;
-        Serial1.println("Reset button pressed...");
-    }
-    
-    // Button held - check for 6 second threshold | 按钮保持按下 - 检查6秒阈值
-    if (currentState && resetButtonPressed && !resetFeedbackGiven) {
-        uint32_t holdTime = now - resetButtonPressTime;
+    while (true) {
+        bool currentState = (digitalRead(PIN_RESET_BUTTON) == LOW);  // Button pressed when LOW
+        uint32_t now = millis();
         
-        if (holdTime >= WIFI_RESET_HOLD_TIME) {
-            resetFeedbackGiven = true;
-            Serial1.println();
-            Serial1.println("=========================================");
-            Serial1.println("  WiFi Reset threshold reached (6s)!");
-            Serial1.println("  WiFi 重置阈值已达到（6秒）！");
-            Serial1.println("  Release button to reset WiFi...");
-            Serial1.println("  松开按钮以重置 WiFi...");
-            Serial1.println("=========================================");
+        // Button just pressed | 按钮刚被按下
+        if (currentState && !resetButtonPressed) {
+            resetButtonPressed = true;
+            resetButtonPressTime = now;
+            resetFeedbackGiven = false;
+            Serial1.println("Reset button pressed...");
+        }
+        
+        // Button held - check for 6 second threshold | 按钮保持按下 - 检查6秒阈值
+        if (currentState && resetButtonPressed && !resetFeedbackGiven) {
+            uint32_t holdTime = now - resetButtonPressTime;
             
-            // Audio + Visual feedback | 声音 + 视觉反馈
-            // Buzzer alarm sound | 蜂鸣器警报声
-            for (int i = 0; i < 3; i++) {
-                tone(PIN_BUZZER, 1500, 100);
+            if (holdTime >= WIFI_RESET_HOLD_TIME) {
+                resetFeedbackGiven = true;
+                Serial1.println();
+                Serial1.println("=========================================");
+                Serial1.println("  WiFi Reset threshold reached (6s)!");
+                Serial1.println("  WiFi 重置阈值已达到（6秒）！");
+                Serial1.println("  Release button to reset WiFi...");
+                Serial1.println("  松开按钮以重置 WiFi...");
+                Serial1.println("=========================================");
+                
+                // Audio + Visual feedback (on Core 0, won't block main loop)
+                // 声音 + 视觉反馈（在 Core 0，不会阻塞主循环）
+                for (int i = 0; i < 3; i++) {
+                    tone(PIN_BUZZER, 1500, 100);
+                    setStatusLED(true);
+                    vTaskDelay(pdMS_TO_TICKS(100));
+                    tone(PIN_BUZZER, 1000, 100);
+                    setStatusLED(false);
+                    vTaskDelay(pdMS_TO_TICKS(100));
+                }
                 setStatusLED(true);
-                delay(100);
-                tone(PIN_BUZZER, 1000, 100);
-                setStatusLED(false);
-                delay(100);
+                tone(PIN_BUZZER, 2000, 200);
             }
-            // Keep LED on to indicate ready to reset | 保持 LED 亮起表示准备重置
-            setStatusLED(true);
-            tone(PIN_BUZZER, 2000, 200);  // Final beep | 最后一声
         }
-    }
-    
-    // Button released | 按钮释放
-    if (!currentState && resetButtonPressed) {
-        uint32_t holdTime = now - resetButtonPressTime;
-        resetButtonPressed = false;
         
-        // If held long enough and feedback was given, trigger WiFi reset
-        // 如果按住足够长时间并且已给反馈，触发 WiFi 重置
-        if (resetFeedbackGiven && holdTime >= WIFI_RESET_HOLD_TIME) {
-            Serial1.println();
-            Serial1.println("=========================================");
-            Serial1.println("  WiFi Reset triggered!");
-            Serial1.println("  WiFi 重置已触发！");
-            Serial1.println("=========================================");
-            Serial1.println("  Clearing credentials and restarting...");
-            Serial1.println("  正在清除凭据并重启...");
+        // Button released | 按钮释放
+        if (!currentState && resetButtonPressed) {
+            uint32_t holdTime = now - resetButtonPressTime;
+            resetButtonPressed = false;
             
-            // Confirmation beep | 确认蜂鸣
-            tone(PIN_BUZZER, 800, 500);
+            // If held long enough, set flag for main loop to handle reset
+            // 如果按住足够长，设置标志让主循环处理重置
+            if (resetFeedbackGiven && holdTime >= WIFI_RESET_HOLD_TIME) {
+                Serial1.println();
+                Serial1.println("=========================================");
+                Serial1.println("  WiFi Reset triggered!");
+                Serial1.println("  WiFi 重置已触发！");
+                Serial1.println("=========================================");
+                
+                tone(PIN_BUZZER, 800, 500);
+                setStatusLED(false);
+                
+                // Set flag for main loop (WiFi operations should be on main core)
+                // 设置标志给主循环（WiFi 操作应在主核心执行）
+                wifiResetRequested = true;
+            }
+            
             setStatusLED(false);
-            
-            // Clear WiFi credentials and restart
-            // 清除 WiFi 凭据并重启
-            ha.clearWiFiCredentials();
-            Serial1.flush();
-            delay(500);
-            ESP.restart();
-            // Never reaches here | 永远不会到达这里
+            resetFeedbackGiven = false;
         }
         
-        // Turn off LED | 关闭 LED
-        setStatusLED(false);
-        resetFeedbackGiven = false;
+        // Small delay to prevent hogging CPU | 小延时防止占用 CPU
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
 }
 
@@ -809,6 +811,20 @@ void setup() {
     pinMode(PIN_RESET_BUTTON, INPUT_PULLUP);
     Serial1.println("  - Status LED (GPIO6): Initialized");
     Serial1.println("  - Reset Button (GPIO3): Initialized");
+    Serial1.println("  - Buzzer (GPIO45): Ready");
+    
+    // Create RTOS task for reset button on Core 0 (main loop runs on Core 1)
+    // 在 Core 0 创建重置按钮的 RTOS 任务（主循环在 Core 1）
+    xTaskCreatePinnedToCore(
+        resetButtonTask,        // Task function | 任务函数
+        "ResetButton",          // Task name | 任务名称
+        4096,                   // Stack size | 堆栈大小
+        NULL,                   // Parameters | 参数
+        1,                      // Priority | 优先级
+        &resetButtonTaskHandle, // Task handle | 任务句柄
+        0                       // Core 0 | 核心 0
+    );
+    Serial1.println("  - Reset button task started on Core 0");
     
     // Brief LED blink to indicate boot | 短暂 LED 闪烁指示启动
     for (int i = 0; i < 2; i++) {
@@ -978,8 +994,17 @@ void loop() {
     // Handle HA communication | 处理 HA 通信
     ha.handle();
     
-    // Check reset button and provide LED feedback | 检查重置按钮并提供 LED 反馈
-    checkResetButtonFeedback();
+    // Check if WiFi reset was requested by the button task (on Core 0)
+    // 检查按钮任务（Core 0）是否请求了 WiFi 重置
+    if (wifiResetRequested) {
+        wifiResetRequested = false;
+        Serial1.println("  Clearing credentials and restarting...");
+        Serial1.println("  正在清除凭据并重启...");
+        ha.clearWiFiCredentials();
+        Serial1.flush();
+        delay(500);
+        ESP.restart();
+    }
     
     // Detect if we entered AP mode due to reset button press
     // 检测是否因按下重置按钮而进入了 AP 模式
