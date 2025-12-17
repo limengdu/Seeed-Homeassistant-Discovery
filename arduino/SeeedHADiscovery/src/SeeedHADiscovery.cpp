@@ -1113,10 +1113,16 @@ void SeeedHADiscovery::clearHAStates() {
 }
 
 void SeeedHADiscovery::handle() {
-    // Handle WiFi provisioning if active | 如果配网激活则处理配网
-    if (_provisioning != nullptr && _provisioning->isAPModeActive()) {
+    // Always handle WiFi provisioning (for reset button check even when WiFi is connected)
+    // 始终处理 WiFi 配网（即使 WiFi 已连接也要检查重置按钮）
+    if (_provisioning != nullptr) {
         _provisioning->handle();
-        return;  // Don't handle other services in AP mode | AP 模式下不处理其他服务
+        
+        // If in AP mode, don't handle other services
+        // 如果在 AP 模式下，不处理其他服务
+        if (_provisioning->isAPModeActive()) {
+            return;
+        }
     }
 
     // Handle HTTP requests | 处理 HTTP 请求

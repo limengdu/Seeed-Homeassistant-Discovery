@@ -72,7 +72,7 @@ class SeeedWiFiProvisioning;
 // =============================================================================
 
 // Library version | 库版本号
-#define SEEED_HA_DISCOVERY_VERSION "1.5.3"
+#define SEEED_HA_DISCOVERY_VERSION "1.5.4"
 
 // Maximum number of subscribed HA entities | 最大订阅 HA 实体数量
 #define SEEED_HA_MAX_SUBSCRIBED_ENTITIES 20
