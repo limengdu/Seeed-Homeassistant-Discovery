@@ -271,14 +271,29 @@ class SeeedHACamera(Camera):
         """
         device_data = self._coordinator.device.device_info
         entry_data = self._entry.data
+        
+        # 获取设备 IP 地址 | Get device IP address
+        host = entry_data.get("host", "")
 
-        return DeviceInfo(
+        info = DeviceInfo(
             identifiers={(DOMAIN, entry_data.get(CONF_DEVICE_ID, ""))},
             name=device_data.get("name", "Seeed HA Device"),
             manufacturer=MANUFACTURER,
             model=entry_data.get(CONF_MODEL, device_data.get("model", "ESP32")),
             sw_version=device_data.get("version", "1.0.0"),
         )
+        
+        # 添加配置 URL（设备 IP 地址）| Add configuration URL (device IP)
+        if host:
+            info["configuration_url"] = f"http://{host}"
+        
+        # 添加 MAC 地址连接信息 | Add MAC address connection info
+        mac_address = entry_data.get("mac_address", "")
+        if mac_address:
+            from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
+            info["connections"] = {(CONNECTION_NETWORK_MAC, mac_address.lower())}
+        
+        return info
 
     @property
     def available(self) -> bool:

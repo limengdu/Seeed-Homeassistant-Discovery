@@ -283,8 +283,12 @@ class SeeedHASensor(CoordinatorEntity, SensorEntity):
         """
         device_data = self.coordinator.device.device_info
         entry_data = self._entry.data
-
-        return DeviceInfo(
+        
+        # 获取设备 IP 地址 | Get device IP address
+        host = entry_data.get("host", "")
+        
+        # 构建设备信息 | Build device info
+        info = DeviceInfo(
             # 设备标识符 - 用于关联实体到设备 | Device identifier
             identifiers={(DOMAIN, entry_data.get(CONF_DEVICE_ID, ""))},
             # 设备名称 | Device name
@@ -296,6 +300,18 @@ class SeeedHASensor(CoordinatorEntity, SensorEntity):
             # 固件版本 | Firmware version
             sw_version=device_data.get("version", "1.0.0"),
         )
+        
+        # 添加配置 URL（设备 IP 地址）| Add configuration URL (device IP)
+        if host:
+            info["configuration_url"] = f"http://{host}"
+        
+        # 添加 MAC 地址连接信息 | Add MAC address connection info
+        mac_address = entry_data.get("mac_address", "")
+        if mac_address:
+            from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
+            info["connections"] = {(CONNECTION_NETWORK_MAC, mac_address.lower())}
+        
+        return info
 
     @property
     def available(self) -> bool:

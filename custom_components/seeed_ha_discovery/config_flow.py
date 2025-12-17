@@ -67,6 +67,22 @@ from .bluetooth import parse_ble_advertisement, is_seeed_ble_device
 _LOGGER = logging.getLogger(__name__)
 
 
+def _generate_display_name(base_name: str, mac_address: str) -> str:
+    """
+    生成带 MAC 地址后缀的显示名称
+    Generate display name with MAC address suffix.
+    
+    例如 | Example: "HA Display" + "AA:BB:CC:DD:EE:FF" -> "HA Display (EEFF)"
+    """
+    if mac_address:
+        # 取 MAC 地址最后4位（去掉冒号后的最后4个字符）
+        # Get last 4 characters of MAC address (without colons)
+        mac_clean = mac_address.replace(":", "").upper()
+        mac_suffix = mac_clean[-4:] if len(mac_clean) >= 4 else mac_clean
+        return f"{base_name} ({mac_suffix})"
+    return base_name
+
+
 class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """
     Seeed HA Discovery 配置流程处理器
@@ -120,6 +136,8 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._connection_type: str = CONNECTION_TYPE_WIFI
         # BLE 设备地址 | BLE device address
         self._ble_address: str | None = None
+        # MAC 地址（用于生成显示名称）| MAC address (for generating display name)
+        self._mac_address: str | None = None
         # BLE 设备的传感器信息 (用于显示) | BLE sensor info (for display)
         self._ble_sensors: list[str] = []
         # BLE 设备是否支持控制 | Whether BLE device supports control
@@ -179,6 +197,11 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     _LOGGER.info("Device info retrieved: %s (device_id=%s, mac=%s)", 
                                 device_info, device_id, mac_address)
 
+                    # 生成带 MAC 后缀的显示名称
+                    # Generate display name with MAC suffix
+                    base_name = device_info.get("name", f"Seeed HA ({host})")
+                    display_name = _generate_display_name(base_name, mac_address)
+
                     # 检查设备是否已被其他 HA 实例连接
                     # Check if device is already connected to another HA instance
                     is_connected = device_info.get("connected", False)
@@ -192,19 +215,21 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         self._host = host
                         self._port = port
                         self._device_id = device_id
-                        self._device_name = device_info.get("name", f"Seeed HA ({host})")
+                        self._device_name = display_name
                         self._model = device_info.get("model", "ESP32")
+                        self._mac_address = mac_address
                         return await self.async_step_confirm_already_connected()
 
                     # 创建配置入口 | Create config entry
                     return self.async_create_entry(
-                        title=device_info.get("name", f"Seeed HA ({host})"),
+                        title=display_name,
                         data={
                             CONF_HOST: host,
                             CONF_PORT: port,
                             CONF_DEVICE_ID: device_id,
                             CONF_MODEL: device_info.get("model", "ESP32"),
                             CONF_CONNECTION_TYPE: CONNECTION_TYPE_WIFI,
+                            "mac_address": mac_address,
                         },
                     )
                 else:
@@ -259,6 +284,7 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_DEVICE_ID: self._device_id,
                     CONF_MODEL: self._model,
                     CONF_CONNECTION_TYPE: CONNECTION_TYPE_WIFI,
+                    "mac_address": self._mac_address,
                 },
             )
 
@@ -309,12 +335,16 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Fallback to id property or IP address
             device_id = properties.get("id", host.replace(".", "_"))
         
-        device_name = properties.get("name", f"Seeed HA ({host})")
+        base_name = properties.get("name", f"Seeed HA ({host})")
         model = properties.get("model", "ESP32")
+        
+        # 生成带 MAC 后缀的显示名称
+        # Generate display name with MAC suffix
+        display_name = _generate_display_name(base_name, mac_address)
 
         # 设备信息 | Device info
         _LOGGER.info("Device ID: %s, Name: %s, Model: %s, MAC: %s", 
-                    device_id, device_name, model, mac_address)
+                    device_id, display_name, model, mac_address)
 
         # 设置唯一 ID，如果另一个流程已在处理同一设备则中止
         # Set unique ID, abort if another flow is already handling the same device
@@ -324,19 +354,23 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Check if another flow for same device is in progress (prevent duplicate cards)
         self._abort_if_unique_id_in_progress()
         
-        # 如果设备已配置则更新其地址 | Update address if device already configured
-        self._abort_if_unique_id_configured(updates={CONF_HOST: host})
+        # 检查设备是否已配置（删除后应该可以重新发现）
+        # Check if device is already configured (should be re-discoverable after deletion)
+        # 不使用 updates 参数，这样删除后的设备可以被重新发现
+        # Don't use updates parameter so deleted devices can be re-discovered
+        self._abort_if_unique_id_configured()
 
         # 保存发现的设备信息 | Save discovered device info
         self._host = host
         self._port = port
         self._device_id = device_id
-        self._device_name = device_name
+        self._device_name = display_name
         self._model = model
+        self._mac_address = mac_address
         self._connection_type = CONNECTION_TYPE_WIFI
 
         # 设置通知中显示的设备名称 | Set device name shown in notification
-        self.context["title_placeholders"] = {"name": device_name}
+        self.context["title_placeholders"] = {"name": display_name}
 
         # 跳转到确认步骤 | Jump to confirm step
         return await self.async_step_zeroconf_confirm()
@@ -384,6 +418,7 @@ class SeeedHAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_DEVICE_ID: self._device_id,
                     CONF_MODEL: self._model,
                     CONF_CONNECTION_TYPE: CONNECTION_TYPE_WIFI,
+                    "mac_address": self._mac_address,
                 },
             )
 
